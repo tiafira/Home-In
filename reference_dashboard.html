@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+
+<html lang="id"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Home In - Admin Dashboard</title>
+<!-- Tailwind CSS v3 with Forms & Container Plugins -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Google Font: Montserrat -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind Custom Config -->
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Montserrat', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              blue: '#1E5FC9',
+              lightBlue: '#EAF1FC',
+              dark: '#1F2A44',
+              muted: '#8A94A6',
+              bgLight: '#F4F6FA',
+            }
+          }
+        }
+      }
+    }
+  </script>
+<style data-purpose="custom-layout">
+    body {
+      font-family: 'Montserrat', sans-serif;
+      background-color: #1E5FC9;
+    }
+    
+    /* Custom Scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.25);
+      border-radius: 9999px;
+    }
+    .main-scroll::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    .main-scroll::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 9999px;
+    }
+
+    /* Tab folder notch shape styling strictly following Reference 1 */
+    .folder-tab-notch {
+      position: absolute;
+      top: -12px;
+      left: 0;
+      width: 46%;
+      height: 14px;
+      border-top-left-radius: 12px;
+      border-top-right-radius: 12px;
+    }
+  </style>
+</head>
+<body class="min-h-screen p-5 md:p-7 flex items-center justify-center antialiased text-brand-dark selection:bg-brand-blue selection:text-white">
+<!-- BEGIN: MainContainer (Single big white rounded card on rich deep blue outer page) -->
+<div class="w-full max-w-[1440px] h-[930px] bg-white rounded-[36px] shadow-2xl overflow-hidden flex flex-col relative" data-purpose="main-container">
+<!-- ==================== 1. TOP BAR (WHITE) ==================== -->
+<header class="w-full h-[76px] bg-white border-b border-slate-100 flex items-center justify-between px-8 flex-shrink-0 z-20" data-purpose="top-navigation">
+<!-- Top-Left: Logo inside the WHITE bar, width 260px matching sidebar below -->
+<div class="w-[260px] flex items-center gap-3">
+<div class="w-9 h-9 rounded-xl bg-brand-blue flex items-center justify-center text-white shadow-md">
+<svg class="w-5 h-5 fill-current" viewbox="0 0 24 24">
+<path d="M12 3L2 12h3v8h6v-6h2v6h6v-8h3L12 3z"></path>
+</svg>
+</div>
+<span class="font-bold text-[22px] tracking-tight text-brand-dark">
+        home<span class="text-brand-blue">_in</span>
+</span>
+</div>
+<!-- Center/Right Search Pill & Tools -->
+<div class="flex-1 max-w-[460px] mx-6">
+<div class="relative w-full">
+<div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-brand-muted">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewbox="0 0 24 24">
+<path d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</div>
+<input class="w-full bg-[#F4F6FA] border-none rounded-full pl-11 pr-5 py-2.5 text-[15px] placeholder-brand-muted text-brand-dark focus:ring-2 focus:ring-brand-blue focus:bg-white transition-all outline-none" placeholder="Search..." type="text"/>
+</div>
+</div>
+<!-- Right Controls: Notification, Help, Settings, Profile & Menu -->
+<div class="flex items-center gap-5">
+<!-- Icons -->
+<button aria-label="Notifikasi" class="text-brand-muted hover:text-brand-blue transition-colors relative p-1" type="button">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24">
+<path d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span class="w-2 h-2 rounded-full bg-brand-blue absolute top-0.5 right-0.5 border-2 border-white"></span>
+</button>
+<button aria-label="Bantuan" class="text-brand-muted hover:text-brand-blue transition-colors p-1" type="button">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24">
+<circle cx="12" cy="12" r="9"></circle>
+<path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3" stroke-linecap="round" stroke-linejoin="round"></path>
+<line stroke-linecap="round" stroke-width="2.5" x1="12" x2="12.01" y1="17" y2="17"></line>
+</svg>
+</button>
+<button aria-label="Pengaturan" class="text-brand-muted hover:text-brand-blue transition-colors p-1" type="button">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24">
+<circle cx="12" cy="12" r="3"></circle>
+<path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"></path>
+</svg>
+</button>
+<!-- User Profile & Hamburger -->
+<div class="flex items-center gap-3 pl-4 border-l border-slate-200">
+<span class="text-[15px] font-semibold text-brand-dark">Budi Santoso</span>
+<div class="w-9 h-9 rounded-full bg-brand-blue text-white font-bold flex items-center justify-center text-[15px] shadow-sm">
+          B
+        </div>
+<button aria-label="Menu" class="text-brand-muted hover:text-brand-dark ml-1" type="button">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewbox="0 0 24 24">
+<path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</button>
+</div>
+</div>
+</header>
+<!-- ==================== BODY (FLUSH SIDEBAR + CONTENT AREA) ==================== -->
+<div class="flex-1 flex flex-row overflow-hidden relative">
+<!-- ==================== 2. SIDEBAR (ATTACHED FLUSH, EXACTLY LIKE REFERENCE 1) ==================== -->
+<aside class="w-[260px] bg-brand-blue flex-shrink-0 flex flex-col justify-between text-white z-10 rounded-tr-[40px] rounded-bl-[36px] rounded-tl-none rounded-br-none overflow-hidden py-6 px-6" data-purpose="primary-sidebar">
+<!-- Top Actions & Navigation List -->
+<div class="flex flex-col h-full overflow-hidden">
+<!-- White Pill Action Button -->
+<button class="w-full max-w-[210px] mx-auto py-3 rounded-full bg-white text-brand-blue font-semibold text-[15px] shadow-md flex items-center justify-center gap-2 hover:bg-opacity-95 transition-all flex-shrink-0 mb-6" type="button">
+<svg class="w-4 h-4 stroke-[2.5]" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M12 4.5v15m7.5-7.5h-15" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span>Tambah Penghuni</span>
+</button>
+<!-- Vertical Menu Items: Regular white text, NO pill container, ~28px gap -->
+<nav class="flex-1 overflow-y-auto space-y-[26px] pr-2 text-[15px] font-normal" data-purpose="sidebar-menu">
+<!-- 1. Dashboard (Active: slightly bolder, subtle indicator, NO contrasting pill) -->
+<a class="flex items-center gap-3.5 text-white font-semibold opacity-100 hover:opacity-100 transition-opacity" href="#">
+<svg class="w-5 h-5 stroke-[2.2]" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span>Dashboard</span>
+</a>
+<!-- 2. Kamar & Gedung -->
+<a class="flex items-center gap-3.5 text-white/80 hover:text-white transition-colors" href="#">
+<svg class="w-5 h-5 stroke-[2]" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.75a1.5 1.5 0 011.5-1.5h1.5a1.5 1.5 0 011.5 1.5V21" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span>Kamar &amp; Gedung</span>
+</a>
+<!-- 3. Penghuni -->
+<a class="flex items-center gap-3.5 text-white/80 hover:text-white transition-colors" href="#">
+<svg class="w-5 h-5 stroke-[2]" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span>Penghuni</span>
+</a>
+<!-- 4. Booking -->
+<a class="flex items-center gap-3.5 text-white/80 hover:text-white transition-colors" href="#">
+<svg class="w-5 h-5 stroke-[2]" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span>Booking</span>
+</a>
+<!-- 5. Pembayaran -->
+<a class="flex items-center gap-3.5 text-white/80 hover:text-white transition-colors" href="#">
+<svg class="w-5 h-5 stroke-[2]" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span>Pembayaran</span>
+</a>
+<!-- 6. Komplain -->
+<a class="flex items-center gap-3.5 text-white/80 hover:text-white transition-colors" href="#">
+<svg class="w-5 h-5 stroke-[2]" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span>Komplain</span>
+</a>
+<!-- 7. Izin Keluar -->
+<a class="flex items-center gap-3.5 text-white/80 hover:text-white transition-colors" href="#">
+<svg class="w-5 h-5 stroke-[2]" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span>Izin Keluar</span>
+</a>
+<!-- 8. Pengumuman -->
+<a class="flex items-center gap-3.5 text-white/80 hover:text-white transition-colors" href="#">
+<svg class="w-5 h-5 stroke-[2]" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 110-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.962.584 1.892.985 2.783.247.55.06 1.21-.463 1.511l-.657.38c-.551.318-1.26.111-1.528-.453a18.067 18.067 0 01-1.32-3.821m2.983-.4zM14.25 15.75c0 .621-.504 1.125-1.125 1.125s-1.125-.504-1.125-1.125" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span>Pengumuman</span>
+</a>
+<!-- 9. Peringatan -->
+<a class="flex items-center gap-3.5 text-white/80 hover:text-white transition-colors" href="#">
+<svg class="w-5 h-5 stroke-[2]" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span>Peringatan</span>
+</a>
+<!-- 10. Laporan Bulanan -->
+<a class="flex items-center gap-3.5 text-white/80 hover:text-white transition-colors" href="#">
+<svg class="w-5 h-5 stroke-[2]" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span>Laporan Bulanan</span>
+</a>
+<!-- 11. Pegawai -->
+<a class="flex items-center gap-3.5 text-white/80 hover:text-white transition-colors" href="#">
+<svg class="w-5 h-5 stroke-[2]" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M20.25 14.15v4.25c0 1.094-.787 2.036-1.872 2.18-2.087.277-4.216.42-6.378.42s-4.291-.143-6.378-.42c-1.085-.144-1.872-1.086-1.872-2.18v-4.25m16.5 0a2.18 2.18 0 00.75-1.661V8.706c0-1.081-.768-2.015-1.837-2.175a48.114 48.114 0 00-3.413-.387m4.5 8.006c-.194.165-.42.295-.673.38A23.978 23.978 0 0112 15.75c-2.648 0-5.195-.429-7.577-1.22a2.016 2.016 0 01-.673-.38m0 0A2.18 2.18 0 013 12.489V8.706c0-1.081.768-2.015 1.837-2.175a48.111 48.111 0 013.413-.387m7.5 0V5.25A2.25 2.25 0 0013.5 3h-3a2.25 2.25 0 00-2.25 2.25v.894m7.5 0a48.667 48.667 0 00-7.5 0" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span>Pegawai</span>
+</a>
+<!-- 12. Fasilitas -->
+<a class="flex items-center gap-3.5 text-white/80 hover:text-white transition-colors" href="#">
+<svg class="w-5 h-5 stroke-[2]" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.948c0-.621-.504-1.125-1.125-1.125H5.625c-.621 0-1.125.504-1.125 1.125v1.729m12 0h-12" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span>Fasilitas</span>
+</a>
+<!-- 13. FAQ -->
+<a class="flex items-center gap-3.5 text-white/80 hover:text-white transition-colors" href="#">
+<svg class="w-5 h-5 stroke-[2]" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span>FAQ</span>
+</a>
+</nav>
+</div>
+<!-- Thin horizontal divider line -->
+<div class="border-t border-white/20 my-5"></div>
+<!-- Occupancy Block (matches Jessica Cipriano's 'Storage details' layout exactly) -->
+<div class="flex-shrink-0" data-purpose="occupancy-widget">
+<h3 class="text-[13px] font-medium tracking-wider text-white/70 uppercase mb-3">Occupancy</h3>
+<!-- Row 1: Kamar Terisi -->
+<div class="mb-3.5">
+<div class="flex items-center gap-2 text-[14px] text-white/95 mb-1.5 font-medium">
+<svg class="w-4 h-4 text-white/90" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24">
+<path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span>Kamar Terisi</span>
+</div>
+<!-- Progress bar -->
+<div class="w-full bg-white/30 h-1.5 rounded-full overflow-hidden mb-1">
+<div class="bg-white h-full rounded-full transition-all duration-500" style="width: 76%;"></div>
+</div>
+<span class="text-[14px] text-white/90 font-medium">38 / 50 kamar terisi</span>
+</div>
+<!-- Row 2: Pembayaran Lunas -->
+<div class="mb-2">
+<div class="flex items-center gap-2 text-[14px] text-white/95 mb-1.5 font-medium">
+<svg class="w-4 h-4 text-white/90" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24">
+<path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span>Pembayaran Lunas</span>
+</div>
+<!-- Progress bar -->
+<div class="w-full bg-white/30 h-1.5 rounded-full overflow-hidden mb-1">
+<div class="bg-white h-full rounded-full transition-all duration-500" style="width: 84%;"></div>
+</div>
+<span class="text-[14px] text-white/90 font-medium">32 / 38 sudah lunas</span>
+</div>
+<!-- Bottom Link -->
+<a class="text-[14px] font-semibold text-white hover:underline mt-3.5 inline-flex items-center gap-1" href="#">
+          Kelola Okupansi <span>↗</span>
+</a>
+</div>
+</aside>
+<!-- ==================== 3. CONTENT AREA (WHITE) ==================== -->
+<main class="flex-1 h-full overflow-y-auto main-scroll px-10 py-6 bg-white" data-purpose="content-area">
+<!-- Page Title Row with Drive-style Icon & View Controls -->
+<div class="flex items-center justify-between mb-6">
+<div class="flex items-center gap-3">
+<h1 class="text-[28px] font-bold text-brand-blue tracking-tight">Dashboard</h1>
+<button aria-label="Folder context" class="w-8 h-8 rounded-lg bg-brand-blue text-white flex items-center justify-center shadow-sm hover:opacity-90 transition" type="button">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24">
+<path d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 00-1.883 2.542l.857 6a2.25 2.25 0 002.227 1.932H19.05a2.25 2.25 0 002.227-1.932l.857-6a2.25 2.25 0 00-1.883-2.542m-16.5 0V6A2.25 2.25 0 016 3.75h3.879a1.5 1.5 0 011.06.44l2.122 2.12a1.5 1.5 0 001.06.44H18A2.25 2.25 0 0120.25 9v.776" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</button>
+</div>
+<!-- View Controls (Grid, List, Info) -->
+<div class="flex items-center gap-2 text-brand-muted">
+<button aria-label="Tampilan grid" class="p-2 rounded-lg hover:bg-brand-bgLight hover:text-brand-dark transition-colors" type="button">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24">
+<path d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</button>
+<button aria-label="Tampilan list" class="p-2 rounded-lg hover:bg-brand-bgLight hover:text-brand-dark transition-colors" type="button">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24">
+<path d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</button>
+<button aria-label="Informasi" class="p-2 rounded-lg hover:bg-brand-bgLight hover:text-brand-dark transition-colors" type="button">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24">
+<circle cx="12" cy="12" r="9"></circle>
+<line stroke-linecap="round" stroke-width="2.5" x1="12" x2="12.01" y1="8" y2="8"></line>
+<path d="M11 12h1v4h1" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</button>
+</div>
+</div>
+<!-- ==================== QUICK ACCESS SECTION ==================== -->
+<section class="mb-7" data-purpose="quick-access">
+<div class="flex items-center justify-between mb-3.5">
+<div class="flex items-center gap-1.5">
+<h2 class="text-[14px] font-bold text-brand-muted tracking-wider uppercase">QUICK ACCESS</h2>
+<span class="text-brand-muted text-sm font-semibold">&gt;</span>
+</div>
+</div>
+<!-- 4 Folder Tab Styled Cards -->
+<div class="grid grid-cols-4 gap-4">
+<!-- Card 1: SOLID BLUE HIGHLIGHTED -->
+<div class="relative bg-brand-blue rounded-2xl rounded-tl-none p-4 text-white shadow-md hover:shadow-lg transition-transform hover:-translate-y-0.5 cursor-pointer min-h-[130px] flex flex-col justify-between">
+<div class="folder-tab-notch bg-brand-blue"></div>
+<div>
+<span class="text-[13px] font-medium tracking-wide uppercase text-white/80 block">KAMAR KOSONG</span>
+<p class="text-[22px] font-bold mt-1 tracking-tight">12 Kamar</p>
+</div>
+<div class="flex items-center justify-between text-[13px] text-white/90">
+<span>Siap huni</span>
+<svg class="w-4 h-4 fill-white opacity-95" viewbox="0 0 24 24">
+<path d="M4 0l16 12.279-6.951 1.17 4.325 8.817-3.596 1.734-4.35-8.879-5.428 5.428z"></path>
+</svg>
+</div>
+</div>
+<!-- Card 2: PENGHUNI AKTIF -->
+<div class="relative bg-[#F4F6FA] border border-slate-100 rounded-2xl rounded-tl-none p-4 shadow-sm hover:shadow-md transition-transform hover:-translate-y-0.5 cursor-pointer min-h-[130px] flex flex-col justify-between">
+<div class="folder-tab-notch bg-[#F4F6FA] border-t border-l border-r border-slate-100"></div>
+<div>
+<span class="text-[13px] font-medium tracking-wide uppercase text-brand-muted block">PENGHUNI AKTIF</span>
+<p class="text-[22px] font-bold text-brand-dark mt-1 tracking-tight">38 Orang</p>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex -space-x-2 overflow-hidden">
+<span class="inline-flex items-center justify-center w-6 h-6 rounded-full ring-2 ring-white bg-amber-400 text-white font-bold text-[13px]">R</span>
+<span class="inline-flex items-center justify-center w-6 h-6 rounded-full ring-2 ring-white bg-rose-400 text-white font-bold text-[13px]">D</span>
+<span class="inline-flex items-center justify-center w-6 h-6 rounded-full ring-2 ring-white bg-emerald-400 text-white font-bold text-[13px]">S</span>
+<span class="inline-flex items-center justify-center w-6 h-6 rounded-full ring-2 ring-white bg-indigo-500 text-white font-bold text-[13px]">+35</span>
+</div>
+<span class="text-[13px] text-brand-muted font-medium">95% Kapasitas</span>
+</div>
+</div>
+<!-- Card 3: PEMASUKAN BULAN INI -->
+<div class="relative bg-[#F4F6FA] border border-slate-100 rounded-2xl rounded-tl-none p-4 shadow-sm hover:shadow-md transition-transform hover:-translate-y-0.5 cursor-pointer min-h-[130px] flex flex-col justify-between">
+<div class="folder-tab-notch bg-[#F4F6FA] border-t border-l border-r border-slate-100"></div>
+<div>
+<span class="text-[13px] font-medium tracking-wide uppercase text-brand-muted block">PEMASUKAN BULAN INI</span>
+<p class="text-[20px] font-bold text-brand-dark mt-1 tracking-tight">Rp 22.800.000</p>
+</div>
+<div class="flex items-center justify-between text-[13px] text-brand-muted">
+<span>Periode Okt 2026</span>
+<span class="text-emerald-600 font-semibold">+8.4%</span>
+</div>
+</div>
+<!-- Card 4: KOMPLAIN BARU (Critical: '5 Komplain', caption '2 belum ditangani') -->
+<div class="relative bg-[#F4F6FA] border border-slate-100 rounded-2xl rounded-tl-none p-4 shadow-sm hover:shadow-md transition-transform hover:-translate-y-0.5 cursor-pointer min-h-[130px] flex flex-col justify-between">
+<div class="folder-tab-notch bg-[#F4F6FA] border-t border-l border-r border-slate-100"></div>
+<div>
+<span class="text-[13px] font-medium tracking-wide uppercase text-brand-muted block">KOMPLAIN BARU</span>
+<p class="text-[22px] font-bold text-brand-dark mt-1 tracking-tight">5 Komplain</p>
+</div>
+<div class="flex items-center justify-between text-[13px]">
+<span class="text-rose-500 font-medium">2 belum ditangani</span>
+<span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+</div>
+</div>
+</div>
+</section>
+<!-- ==================== PEMBAYARAN TERBARU (All Files style table) ==================== -->
+<section class="mb-7" data-purpose="recent-payments-table">
+<h2 class="text-[18px] font-semibold text-brand-dark mb-3">Pembayaran Terbaru</h2>
+<div class="w-full overflow-hidden">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="text-[13px] font-medium tracking-wider text-brand-muted uppercase border-b border-slate-100 pb-2">
+<th class="py-2.5 px-3">PENGHUNI</th>
+<th class="py-2.5 px-3">KAMAR</th>
+<th class="py-2.5 px-3">PERIODE</th>
+<th class="py-2.5 px-3">JUMLAH TAGIHAN</th>
+<th class="py-2.5 px-3">JATUH TEMPO</th>
+<th class="py-2.5 px-3 text-center">STATUS</th>
+<th class="py-2.5 px-3 text-right">AKSI</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100/70 text-[15px] text-brand-dark">
+<!-- Row 1: Rina Putri -->
+<tr class="hover:bg-slate-50 transition-colors">
+<td class="py-3 px-3">
+<div class="flex items-center gap-3">
+<span class="w-7 h-7 rounded-full bg-blue-100 text-brand-blue font-bold text-[13px] flex items-center justify-center flex-shrink-0">RP</span>
+<span class="font-medium text-[15px]">Rina Putri</span>
+</div>
+</td>
+<td class="py-3 px-3 text-brand-muted font-medium text-[15px]">Kamar A-03 (Lt. 1)</td>
+<td class="py-3 px-3 text-brand-muted text-[15px]">Okt 2026</td>
+<td class="py-3 px-3 font-semibold text-[15px]">Rp 600.000</td>
+<td class="py-3 px-3 text-brand-muted text-[15px]">10 Okt 2026</td>
+<td class="py-3 px-3 text-center">
+<span class="inline-flex items-center px-3 py-1 rounded-full text-[13px] font-semibold bg-emerald-50 text-emerald-600">
+                    Lunas
+                  </span>
+</td>
+<td class="py-3 px-3 text-right text-brand-muted">
+<button aria-label="Aksi baris Rina Putri" class="p-1 hover:text-brand-dark text-lg" type="button">⋯</button>
+</td>
+</tr>
+<!-- Row 2: Dimas Pratama (HIGHLIGHTED with light blue tint #EAF1FC across the row & pointer cursor) -->
+<tr class="bg-brand-lightBlue rounded-xl cursor-pointer">
+<td class="py-3 px-3">
+<div class="flex items-center gap-3">
+<span class="w-7 h-7 rounded-full bg-brand-blue text-white font-bold text-[13px] flex items-center justify-center flex-shrink-0">DP</span>
+<span class="font-semibold text-brand-dark text-[15px]">Dimas Pratama</span>
+</div>
+</td>
+<td class="py-3 px-3 text-brand-dark font-medium text-[15px]">Kamar B-05 (Lt. 2)</td>
+<td class="py-3 px-3 text-brand-dark text-[15px]">Okt 2026</td>
+<td class="py-3 px-3 font-bold text-brand-blue text-[15px]">Rp 600.000</td>
+<td class="py-3 px-3 text-brand-dark text-[15px]">10 Okt 2026</td>
+<td class="py-3 px-3 text-center">
+<span class="inline-flex items-center px-3 py-1 rounded-full text-[13px] font-semibold bg-amber-50 text-amber-600">
+                    Menunggu Konfirmasi
+                  </span>
+</td>
+<td class="py-3 px-3 text-right text-brand-blue font-bold flex items-center justify-end gap-2">
+<svg class="w-3.5 h-3.5 fill-brand-blue" viewbox="0 0 24 24">
+<path d="M4 0l16 12.279-6.951 1.17 4.325 8.817-3.596 1.734-4.35-8.879-5.428 5.428z"></path>
+</svg>
+<button aria-label="Aksi baris Dimas Pratama" class="p-1 text-brand-dark text-lg" type="button">⋯</button>
+</td>
+</tr>
+<!-- Row 3: Siti Rahma -->
+<tr class="hover:bg-slate-50 transition-colors">
+<td class="py-3 px-3">
+<div class="flex items-center gap-3">
+<span class="w-7 h-7 rounded-full bg-emerald-100 text-emerald-600 font-bold text-[13px] flex items-center justify-center flex-shrink-0">SR</span>
+<span class="font-medium text-[15px]">Siti Rahma</span>
+</div>
+</td>
+<td class="py-3 px-3 text-brand-muted font-medium text-[15px]">Kamar A-08 (Lt. 1)</td>
+<td class="py-3 px-3 text-brand-muted text-[15px]">Okt 2026</td>
+<td class="py-3 px-3 font-semibold text-[15px]">Rp 650.000</td>
+<td class="py-3 px-3 text-brand-muted text-[15px]">10 Okt 2026</td>
+<td class="py-3 px-3 text-center">
+<span class="inline-flex items-center px-3 py-1 rounded-full text-[13px] font-semibold bg-emerald-50 text-emerald-600">
+                    Lunas
+                  </span>
+</td>
+<td class="py-3 px-3 text-right text-brand-muted">
+<button aria-label="Aksi baris Siti Rahma" class="p-1 hover:text-brand-dark text-lg" type="button">⋯</button>
+</td>
+</tr>
+<!-- Row 4: Rizky Fauzi -->
+<tr class="hover:bg-slate-50 transition-colors">
+<td class="py-3 px-3">
+<div class="flex items-center gap-3">
+<span class="w-7 h-7 rounded-full bg-slate-200 text-slate-700 font-bold text-[13px] flex items-center justify-center flex-shrink-0">RF</span>
+<span class="font-medium text-[15px]">Rizky Fauzi</span>
+</div>
+</td>
+<td class="py-3 px-3 text-brand-muted font-medium text-[15px]">Kamar C-01 (Lt. 3)</td>
+<td class="py-3 px-3 text-brand-muted text-[15px]">Okt 2026</td>
+<td class="py-3 px-3 font-semibold text-[15px]">Rp 600.000</td>
+<td class="py-3 px-3 text-brand-muted text-[15px]">05 Okt 2026</td>
+<td class="py-3 px-3 text-center">
+<span class="inline-flex items-center px-3 py-1 rounded-full text-[13px] font-semibold bg-slate-100 text-slate-600">
+                    Belum Bayar
+                  </span>
+</td>
+<td class="py-3 px-3 text-right text-brand-muted">
+<button aria-label="Aksi baris Rizky Fauzi" class="p-1 hover:text-brand-dark text-lg" type="button">⋯</button>
+</td>
+</tr>
+<!-- Row 5: Maya Dewi -->
+<tr class="hover:bg-slate-50 transition-colors">
+<td class="py-3 px-3">
+<div class="flex items-center gap-3">
+<span class="w-7 h-7 rounded-full bg-rose-100 text-rose-600 font-bold text-[13px] flex items-center justify-center flex-shrink-0">MD</span>
+<span class="font-medium text-[15px]">Maya Dewi</span>
+</div>
+</td>
+<td class="py-3 px-3 text-brand-muted font-medium text-[15px]">Kamar B-02 (Lt. 2)</td>
+<td class="py-3 px-3 text-brand-muted text-[15px]">Okt 2026</td>
+<td class="py-3 px-3 font-semibold text-[15px]">Rp 700.000</td>
+<td class="py-3 px-3 text-rose-500 font-medium text-[15px]">01 Okt 2026</td>
+<td class="py-3 px-3 text-center">
+<span class="inline-flex items-center px-3 py-1 rounded-full text-[13px] font-semibold bg-rose-50 text-rose-600">
+                    Telat
+                  </span>
+</td>
+<td class="py-3 px-3 text-right text-brand-muted">
+<button aria-label="Aksi baris Maya Dewi" class="p-1 hover:text-brand-dark text-lg" type="button">⋯</button>
+</td>
+</tr>
+<!-- Row 6: Andi Wijaya -->
+<tr class="hover:bg-slate-50 transition-colors">
+<td class="py-3 px-3">
+<div class="flex items-center gap-3">
+<span class="w-7 h-7 rounded-full bg-indigo-100 text-indigo-600 font-bold text-[13px] flex items-center justify-center flex-shrink-0">AW</span>
+<span class="font-medium text-[15px]">Andi Wijaya</span>
+</div>
+</td>
+<td class="py-3 px-3 text-brand-muted font-medium text-[15px]">Kamar A-01 (Lt. 1)</td>
+<td class="py-3 px-3 text-brand-muted text-[15px]">Okt 2026</td>
+<td class="py-3 px-3 font-semibold text-[15px]">Rp 600.000</td>
+<td class="py-3 px-3 text-brand-muted text-[15px]">10 Okt 2026</td>
+<td class="py-3 px-3 text-center">
+<span class="inline-flex items-center px-3 py-1 rounded-full text-[13px] font-semibold bg-emerald-50 text-emerald-600">
+                    Lunas
+                  </span>
+</td>
+<td class="py-3 px-3 text-right text-brand-muted">
+<button aria-label="Aksi baris Andi Wijaya" class="p-1 hover:text-brand-dark text-lg" type="button">⋯</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<!-- ==================== KOMPLAIN TERBARU SECTION ==================== -->
+<section class="pt-2 border-t border-slate-100" data-purpose="recent-complaints-section">
+<h2 class="text-[18px] font-semibold text-brand-dark mb-3">Komplain Terbaru</h2>
+<div class="w-full overflow-hidden">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="text-[13px] font-medium tracking-wider text-brand-muted uppercase border-b border-slate-100 pb-2">
+<th class="py-2.5 px-3">PENGHUNI</th>
+<th class="py-2.5 px-3">KATEGORI</th>
+<th class="py-2.5 px-3">ISI KOMPLAIN</th>
+<th class="py-2.5 px-3 text-right">STATUS</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100 text-[15px] text-brand-dark">
+<!-- Complaint 1 -->
+<tr class="hover:bg-slate-50 transition-colors">
+<td class="py-2.5 px-3">
+<span class="font-medium text-brand-dark">Rizky Fauzi</span>
+<span class="text-[13px] text-brand-muted block">Kamar A-04</span>
+</td>
+<td class="py-2.5 px-3 text-[14px] font-medium text-brand-muted">Fasilitas AC</td>
+<td class="py-2.5 px-3 text-[15px] text-brand-dark">"AC bocor menetes ke kasur"</td>
+<td class="py-2.5 px-3 text-right">
+<span class="inline-flex items-center px-3 py-1 rounded-full text-[13px] font-semibold bg-rose-50 text-rose-600">
+                    Baru
+                  </span>
+</td>
+</tr>
+<!-- Complaint 2 -->
+<tr class="hover:bg-slate-50 transition-colors">
+<td class="py-2.5 px-3">
+<span class="font-medium text-brand-dark">Nadia S.</span>
+<span class="text-[13px] text-brand-muted block">Kamar B-03</span>
+</td>
+<td class="py-2.5 px-3 text-[14px] font-medium text-brand-muted">Kelistrikan</td>
+<td class="py-2.5 px-3 text-[15px] text-brand-dark">"Lampu koridor lantai 2 padam"</td>
+<td class="py-2.5 px-3 text-right">
+<span class="inline-flex items-center px-3 py-1 rounded-full text-[13px] font-semibold bg-amber-50 text-amber-600">
+                    Diproses
+                  </span>
+</td>
+</tr>
+<!-- Complaint 3 -->
+<tr class="hover:bg-slate-50 transition-colors">
+<td class="py-2.5 px-3">
+<span class="font-medium text-brand-dark">Maya Dewi</span>
+<span class="text-[13px] text-brand-muted block">Kamar B-01</span>
+</td>
+<td class="py-2.5 px-3 text-[14px] font-medium text-brand-muted">Kebersihan</td>
+<td class="py-2.5 px-3 text-[15px] text-brand-dark">"Tempat sampah depan penuh"</td>
+<td class="py-2.5 px-3 text-right">
+<span class="inline-flex items-center px-3 py-1 rounded-full text-[13px] font-semibold bg-emerald-50 text-emerald-600">
+                    Selesai
+                  </span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+</main>
+</div>
+</div>
+</body></html>
