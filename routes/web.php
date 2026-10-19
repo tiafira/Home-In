@@ -7,7 +7,8 @@ use Illuminate\Support\Facades\Route;
 | Web Routes
 |--------------------------------------------------------------------------
 |
-| All frontend routing is handled by the React Router SPA application.
+| Landing page at root (/), and all other non-API routes are handled
+| by the React Router SPA application.
 |
 */
 
@@ -17,4 +18,4 @@ Route::get('/', function () {
 
 Route::get('/{any?}', function () {
     return view('app');
-})->where('any', '.*');
+})->where('any', '^(?!api).*$');

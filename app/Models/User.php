@@ -16,6 +16,7 @@ class User extends Authenticatable
 
     protected $fillable = [
         'nama',
+        'name',
         'email',
         'password',
         'no_hp',
@@ -29,6 +30,20 @@ class User extends Authenticatable
     protected $hidden = [
         'password',
     ];
+
+    protected $appends = [
+        'name',
+    ];
+
+    public function getNameAttribute(): ?string
+    {
+        return $this->attributes['nama'] ?? null;
+    }
+
+    public function setNameAttribute(?string $value): void
+    {
+        $this->attributes['nama'] = $value;
+    }
 
     protected function casts(): array
     {

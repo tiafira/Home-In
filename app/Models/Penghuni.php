@@ -54,4 +54,24 @@ class Penghuni extends Model
     {
         return $this->hasMany(Komplain::class, 'penghuni_id');
     }
+
+    public function peringatan(): HasMany
+    {
+        return $this->hasMany(Peringatan::class, 'penghuni_id');
+    }
+
+    public function izinKeluar(): HasMany
+    {
+        return $this->hasMany(IzinKeluar::class, 'penghuni_id');
+    }
+
+    public function laporanTamu(): HasMany
+    {
+        return $this->hasMany(LaporanTamu::class, 'penghuni_id');
+    }
+
+    public function laporanPulang(): HasMany
+    {
+        return $this->hasMany(LaporanPulang::class, 'penghuni_id');
+    }
 }

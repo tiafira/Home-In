@@ -1,11 +1,14 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 
 export default function StatCards({ data, loading }) {
+    const navigate = useNavigate();
+
     if (loading) {
         return (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-7 animate-pulse">
                 {[1, 2, 3, 4].map((i) => (
-                    <div key={i} className="h-[130px] bg-slate-100 rounded-2xl p-4"></div>
+                    <div key={i} className="h-[130px] bg-slate-200/70 rounded-2xl p-4"></div>
                 ))}
             </div>
         );
@@ -19,46 +22,57 @@ export default function StatCards({ data, loading }) {
     } = data || {};
 
     const avatarColors = [
-        'bg-amber-400',
-        'bg-rose-400',
-        'bg-emerald-400',
-        'bg-indigo-500',
+        'bg-[#263b53]',
+        'bg-[#3b82f6]',
+        'bg-emerald-500',
+        'bg-amber-500',
     ];
 
     return (
         <section className="mb-7" data-purpose="quick-access">
             <div className="flex items-center justify-between mb-3.5">
                 <div className="flex items-center gap-1.5">
-                    <h2 className="text-[14px] font-bold text-[#8A94A6] tracking-wider uppercase">QUICK ACCESS</h2>
-                    <span className="text-[#8A94A6] text-sm font-semibold">&gt;</span>
+                    <h2 className="text-[13px] font-extrabold text-[#263b53] tracking-wider uppercase">QUICK ACCESS</h2>
+                    <span className="text-[#3b82f6] text-sm font-bold">&gt;</span>
                 </div>
+                <span className="text-xs text-[#64748b] hidden sm:inline">Klik kartu untuk membuka modul terkait</span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* 1. Kamar Kosong (Blue Folder Notch) */}
+                {/* 1. Kamar Kosong -> Dominant #263b53 Card */}
                 <div
-                    style={{ backgroundColor: '#1E5FC9' }}
-                    className="relative bg-[#1E5FC9] rounded-2xl rounded-tl-none p-4 text-white shadow-md hover:shadow-lg transition-transform hover:-translate-y-0.5 cursor-pointer min-h-[130px] flex flex-col justify-between"
+                    onClick={() => navigate('/admin/kamar')}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => e.key === 'Enter' && navigate('/admin/kamar')}
+                    style={{ backgroundColor: '#263b53' }}
+                    className="relative bg-[#263b53] rounded-2xl rounded-tl-none p-4 text-white shadow-md hover:shadow-xl transition-all hover:-translate-y-0.5 cursor-pointer min-h-[130px] flex flex-col justify-between group"
                 >
-                    <div style={{ backgroundColor: '#1E5FC9' }} className="folder-tab-notch bg-[#1E5FC9]"></div>
+                    <div style={{ backgroundColor: '#263b53' }} className="folder-tab-notch bg-[#263b53]"></div>
                     <div>
-                        <span className="text-[13px] font-medium tracking-wide uppercase text-white/80 block">KAMAR KOSONG</span>
-                        <p className="text-[22px] font-bold mt-1 tracking-tight">{kamar_kosong.label}</p>
+                        <span className="text-[12px] font-semibold tracking-wider uppercase text-slate-300 block">KAMAR KOSONG</span>
+                        <p className="text-[22px] font-extrabold mt-1 tracking-tight text-white">{kamar_kosong.label}</p>
                     </div>
-                    <div className="flex items-center justify-between text-[13px] text-white/90">
+                    <div className="flex items-center justify-between text-[13px] text-slate-200">
                         <span>{kamar_kosong.subtext}</span>
-                        <svg className="w-4 h-4 fill-white opacity-95" viewBox="0 0 24 24">
-                            <path d="M4 0l16 12.279-6.951 1.17 4.325 8.817-3.596 1.734-4.35-8.879-5.428 5.428z"></path>
-                        </svg>
+                        <span className="inline-flex items-center gap-1 font-bold text-xs bg-white text-[#263b53] px-2.5 py-1 rounded-full group-hover:bg-[#3b82f6] group-hover:text-white transition">
+                            Kelola &rarr;
+                        </span>
                     </div>
                 </div>
 
-                {/* 2. Penghuni Aktif */}
-                <div className="relative bg-[#F4F6FA] border border-slate-100 rounded-2xl rounded-tl-none p-4 shadow-sm hover:shadow-md transition-transform hover:-translate-y-0.5 cursor-pointer min-h-[130px] flex flex-col justify-between">
-                    <div className="folder-tab-notch bg-[#F4F6FA] border-t border-l border-r border-slate-100"></div>
+                {/* 2. Penghuni Aktif -> Crisp White Card with #263b53 Accents */}
+                <div
+                    onClick={() => navigate('/admin/penghuni')}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => e.key === 'Enter' && navigate('/admin/penghuni')}
+                    className="relative bg-white border border-slate-200/80 rounded-2xl rounded-tl-none p-4 shadow-xs hover:shadow-md hover:border-[#263b53]/30 transition-all hover:-translate-y-0.5 cursor-pointer min-h-[130px] flex flex-col justify-between group"
+                >
+                    <div className="folder-tab-notch bg-white border-t border-l border-r border-slate-200/80"></div>
                     <div>
-                        <span className="text-[13px] font-medium tracking-wide uppercase text-[#8A94A6] block">PENGHUNI AKTIF</span>
-                        <p className="text-[22px] font-bold text-[#1F2A44] mt-1 tracking-tight">{penghuni_aktif.label}</p>
+                        <span className="text-[12px] font-bold tracking-wider uppercase text-[#64748b] group-hover:text-[#263b53] transition-colors block">PENGHUNI AKTIF</span>
+                        <p className="text-[22px] font-extrabold text-[#263b53] mt-1 tracking-tight">{penghuni_aktif.label}</p>
                     </div>
                     <div className="flex items-center justify-between">
                         <div className="flex -space-x-2 overflow-hidden">
@@ -82,33 +96,45 @@ export default function StatCards({ data, loading }) {
                                 ))
                             )}
                         </div>
-                        <span className="text-[13px] font-medium text-[#1E5FC9]">{penghuni_aktif.subtext}</span>
+                        <span className="text-[12px] font-bold text-[#263b53] group-hover:text-[#3b82f6] transition">{penghuni_aktif.subtext} &rarr;</span>
                     </div>
                 </div>
 
-                {/* 3. Pemasukan */}
-                <div className="relative bg-[#F4F6FA] border border-slate-100 rounded-2xl rounded-tl-none p-4 shadow-sm hover:shadow-md transition-transform hover:-translate-y-0.5 cursor-pointer min-h-[130px] flex flex-col justify-between">
-                    <div className="folder-tab-notch bg-[#F4F6FA] border-t border-l border-r border-slate-100"></div>
+                {/* 3. Pemasukan -> Crisp White Card with #263b53 Accents */}
+                <div
+                    onClick={() => navigate('/admin/pembayaran')}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => e.key === 'Enter' && navigate('/admin/pembayaran')}
+                    className="relative bg-white border border-slate-200/80 rounded-2xl rounded-tl-none p-4 shadow-xs hover:shadow-md hover:border-[#263b53]/30 transition-all hover:-translate-y-0.5 cursor-pointer min-h-[130px] flex flex-col justify-between group"
+                >
+                    <div className="folder-tab-notch bg-white border-t border-l border-r border-slate-200/80"></div>
                     <div>
-                        <span className="text-[13px] font-medium tracking-wide uppercase text-[#8A94A6] block">PEMASUKAN BULAN INI</span>
-                        <p className="text-[22px] font-bold text-[#1F2A44] mt-1 tracking-tight">{pemasukan.total_format}</p>
+                        <span className="text-[12px] font-bold tracking-wider uppercase text-[#64748b] group-hover:text-[#263b53] transition-colors block">PEMASUKAN BULAN INI</span>
+                        <p className="text-[22px] font-extrabold text-[#263b53] mt-1 tracking-tight">{pemasukan.total_format}</p>
                     </div>
-                    <div className="flex items-center justify-between text-[13px]">
-                        <span className="text-[#8A94A6]">{pemasukan.periode_label}</span>
-                        <span className="text-emerald-600 font-semibold">{pemasukan.persen_perubahan}</span>
+                    <div className="flex items-center justify-between text-[12px]">
+                        <span className="text-[#64748b] font-medium">{pemasukan.periode_label}</span>
+                        <span className="text-emerald-600 font-bold group-hover:underline">{pemasukan.persen_perubahan} &rarr;</span>
                     </div>
                 </div>
 
-                {/* 4. Komplain Baru */}
-                <div className="relative bg-[#F4F6FA] border border-slate-100 rounded-2xl rounded-tl-none p-4 shadow-sm hover:shadow-md transition-transform hover:-translate-y-0.5 cursor-pointer min-h-[130px] flex flex-col justify-between">
-                    <div className="folder-tab-notch bg-[#F4F6FA] border-t border-l border-r border-slate-100"></div>
+                {/* 4. Komplain Baru -> Crisp White Card with #263b53 Accents */}
+                <div
+                    onClick={() => navigate('/admin/komplain')}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => e.key === 'Enter' && navigate('/admin/komplain')}
+                    className="relative bg-white border border-slate-200/80 rounded-2xl rounded-tl-none p-4 shadow-xs hover:shadow-md hover:border-[#263b53]/30 transition-all hover:-translate-y-0.5 cursor-pointer min-h-[130px] flex flex-col justify-between group"
+                >
+                    <div className="folder-tab-notch bg-white border-t border-l border-r border-slate-200/80"></div>
                     <div>
-                        <span className="text-[13px] font-medium tracking-wide uppercase text-[#8A94A6] block">KOMPLAIN BARU</span>
-                        <p className="text-[22px] font-bold text-[#1F2A44] mt-1 tracking-tight">{komplain_baru.label}</p>
+                        <span className="text-[12px] font-bold tracking-wider uppercase text-[#64748b] group-hover:text-[#263b53] transition-colors block">KOMPLAIN BELUM DITANGGAPI</span>
+                        <p className="text-[22px] font-extrabold text-[#263b53] mt-1 tracking-tight">{komplain_baru.label}</p>
                     </div>
-                    <div className="flex items-center justify-between text-[13px]">
-                        <span className="text-[#8A94A6]">{komplain_baru.subtext}</span>
-                        <div className="w-2.5 h-2.5 rounded-full bg-amber-400"></div>
+                    <div className="flex items-center justify-between text-[12px]">
+                        <span className="text-[#64748b] font-medium group-hover:text-[#263b53]">{komplain_baru.subtext} &rarr;</span>
+                        <div className="w-2.5 h-2.5 rounded-full bg-amber-400 ring-4 ring-amber-50"></div>
                     </div>
                 </div>
             </div>

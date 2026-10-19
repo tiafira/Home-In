@@ -71,14 +71,14 @@ export default function Login() {
                     </div>
 
                     <div className="relative z-10">
-                        <div className="flex items-center space-x-3 mb-6">
+                        <a href="/" className="inline-flex items-center space-x-3 mb-6 hover:opacity-90 transition">
                             <div className="w-9 h-9 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center text-white shrink-0">
                                 <svg className="w-5 h-5 text-white fill-current" viewBox="0 0 20 20">
                                     <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"></path>
                                 </svg>
                             </div>
-                            <span className="font-semibold text-white text-[20px] tracking-tight">home_in</span>
-                        </div>
+                            <span className="font-semibold text-white text-[20px] tracking-tight">Home-In</span>
+                        </a>
                         <h1 className="text-[32px] font-bold leading-tight text-white max-w-md tracking-tight">
                             Selamat datang kembali di sistem manajemen kost modern.
                         </h1>
@@ -112,7 +112,7 @@ export default function Login() {
     <rect x="95" y="110" width="310" height="230" rx="16" fill="#F8FAFC" stroke="#FFFFFF" strokeWidth="4"></rect>
     <rect x="110" y="105" width="280" height="12" rx="4" fill="#1E293B"></rect>
     <rect x="235" y="88" width="145" height="22" rx="4" fill="#0EA5E9"></rect>
-    <text x="307" y="103" fill="#FFFFFF" fontSize="11" fontFamily="Montserrat, sans-serif" fontWeight="700" textAnchor="middle" letterSpacing="1.5">KOST HOME_IN</text>
+    <text x="307" y="103" fill="#FFFFFF" fontSize="11" fontFamily="Montserrat, sans-serif" fontWeight="700" textAnchor="middle" letterSpacing="1.5">KOST HOME-IN</text>
     <rect x="95" y="215" width="310" height="8" fill="#E2E8F0"></rect>
     <line x1="245" y1="117" x2="245" y2="340" stroke="#CBD5E1" strokeWidth="3" strokeDasharray="6 4"></line>
     <rect x="122" y="132" width="48" height="52" rx="6" fill="#FEF08A" stroke="#E2E8F0" strokeWidth="2"></rect>

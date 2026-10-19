@@ -14,6 +14,10 @@ api.interceptors.request.use(
         if (token) {
             config.headers.Authorization = 'Bearer ' + token;
         }
+        const branchId = localStorage.getItem('home_in_selected_branch');
+        if (branchId) {
+            config.headers['X-Cabang-Id'] = branchId;
+        }
         return config;
     },
     (error) => Promise.reject(error)

@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Kamar extends Model
 {
@@ -38,5 +39,15 @@ class Kamar extends Model
     public function penghuni(): HasMany
     {
         return $this->hasMany(Penghuni::class, 'kamar_id');
+    }
+
+    public function penghuniAktif(): HasOne
+    {
+        return $this->hasOne(Penghuni::class, 'kamar_id')->where('status', 'aktif');
+    }
+
+    public function kamarFasilitas(): HasMany
+    {
+        return $this->hasMany(KamarFasilitas::class, 'kamar_id');
     }
 }

@@ -4,7 +4,7 @@ import Sidebar from '../../components/Admin/Sidebar';
 
 export default function PlaceholderPage({ title = 'Menu Admin' }) {
     return (
-        <div className="min-h-screen p-3 md:p-7 flex items-center justify-center antialiased text-brand-dark bg-[#1E5FC9]">
+        <div className="min-h-screen p-3 md:p-7 flex items-center justify-center antialiased text-brand-dark bg-[#263b53]">
             <div className="w-full max-w-[1440px] h-[930px] max-h-[96vh] bg-white rounded-[36px] shadow-2xl overflow-hidden flex flex-col relative">
                 <Header />
                 <div className="flex-1 flex flex-row overflow-hidden relative">

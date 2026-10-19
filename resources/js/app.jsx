@@ -3,23 +3,40 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { BranchProvider } from './context/BranchContext';
+import { ToastProvider } from './context/ToastContext';
 import ProtectedRoute from './Components/ProtectedRoute';
 
 import Login from './Pages/Auth/Login';
 import Register from './Pages/Auth/Register';
 import Unauthorized from './Pages/Unauthorized';
+
+// Admin Functional Pages
 import AdminDashboard from './Pages/Admin/Dashboard';
-import PlaceholderPage from './Pages/Admin/PlaceholderPage';
+import KamarGedung from './Pages/Admin/KamarGedung';
+import Penghuni from './Pages/Admin/Penghuni';
+import Booking from './Pages/Admin/Booking';
+import Pembayaran from './Pages/Admin/Pembayaran';
+import Komplain from './Pages/Admin/Komplain';
+import IzinKeluar from './Pages/Admin/IzinKeluar';
+import Pengumuman from './Pages/Admin/Pengumuman';
+import Peringatan from './Pages/Admin/Peringatan';
+import Laporan from './Pages/Admin/Laporan';
+import LaporanBulanan from './Pages/Admin/LaporanBulanan';
+import Pegawai from './Pages/Admin/Pegawai';
+import Fasilitas from './Pages/Admin/Fasilitas';
 
 function App() {
     return (
         <AuthProvider>
-            <BrowserRouter>
-                <Routes>
-                    {/* Public Guest Routes */}
-                    <Route path="/login" element={<Login />} />
-                    <Route path="/register" element={<Register />} />
-                    <Route path="/unauthorized" element={<Unauthorized />} />
+            <BranchProvider>
+                <ToastProvider>
+                    <BrowserRouter>
+                        <Routes>
+                            {/* Public Guest Routes */}
+                            <Route path="/login" element={<Login />} />
+                            <Route path="/register" element={<Register />} />
+                            <Route path="/unauthorized" element={<Unauthorized />} />
 
                     {/* Admin Protected Routes */}
                     <Route
@@ -30,37 +47,11 @@ function App() {
                             </ProtectedRoute>
                         }
                     />
-
-                    {/* Placeholder pages for sidebar menus */}
-                    <Route
-                        path="/admin/cabang"
-                        element={
-                            <ProtectedRoute allowedRoles={['pemilik', 'admin']}>
-                                <PlaceholderPage title="Kelola Cabang" />
-                            </ProtectedRoute>
-                        }
-                    />
-                    <Route
-                        path="/admin/gedung"
-                        element={
-                            <ProtectedRoute allowedRoles={['pemilik', 'admin']}>
-                                <PlaceholderPage title="Gedung & Lantai" />
-                            </ProtectedRoute>
-                        }
-                    />
                     <Route
                         path="/admin/kamar"
                         element={
                             <ProtectedRoute allowedRoles={['pemilik', 'admin']}>
-                                <PlaceholderPage title="Manajemen Kamar" />
-                            </ProtectedRoute>
-                        }
-                    />
-                    <Route
-                        path="/admin/fasilitas"
-                        element={
-                            <ProtectedRoute allowedRoles={['pemilik', 'admin']}>
-                                <PlaceholderPage title="Fasilitas Kost" />
+                                <KamarGedung />
                             </ProtectedRoute>
                         }
                     />
@@ -68,31 +59,15 @@ function App() {
                         path="/admin/penghuni"
                         element={
                             <ProtectedRoute allowedRoles={['pemilik', 'admin']}>
-                                <PlaceholderPage title="Data Penghuni" />
+                                <Penghuni />
                             </ProtectedRoute>
                         }
                     />
                     <Route
-                        path="/admin/pegawai"
+                        path="/admin/booking"
                         element={
                             <ProtectedRoute allowedRoles={['pemilik', 'admin']}>
-                                <PlaceholderPage title="Data Pegawai" />
-                            </ProtectedRoute>
-                        }
-                    />
-                    <Route
-                        path="/admin/tamu"
-                        element={
-                            <ProtectedRoute allowedRoles={['pemilik', 'admin']}>
-                                <PlaceholderPage title="Buku Tamu" />
-                            </ProtectedRoute>
-                        }
-                    />
-                    <Route
-                        path="/admin/izin-keluar"
-                        element={
-                            <ProtectedRoute allowedRoles={['pemilik', 'admin']}>
-                                <PlaceholderPage title="Izin Keluar" />
+                                <Booking />
                             </ProtectedRoute>
                         }
                     />
@@ -100,7 +75,7 @@ function App() {
                         path="/admin/pembayaran"
                         element={
                             <ProtectedRoute allowedRoles={['pemilik', 'admin']}>
-                                <PlaceholderPage title="Pembayaran & Tagihan" />
+                                <Pembayaran />
                             </ProtectedRoute>
                         }
                     />
@@ -108,7 +83,31 @@ function App() {
                         path="/admin/komplain"
                         element={
                             <ProtectedRoute allowedRoles={['pemilik', 'admin']}>
-                                <PlaceholderPage title="Layanan Komplain" />
+                                <Komplain />
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/admin/izin-keluar"
+                        element={
+                            <ProtectedRoute allowedRoles={['pemilik', 'admin']}>
+                                <IzinKeluar />
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/admin/pengumuman"
+                        element={
+                            <ProtectedRoute allowedRoles={['pemilik', 'admin']}>
+                                <Pengumuman />
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/admin/peringatan"
+                        element={
+                            <ProtectedRoute allowedRoles={['pemilik', 'admin']}>
+                                <Peringatan />
                             </ProtectedRoute>
                         }
                     />
@@ -116,15 +115,31 @@ function App() {
                         path="/admin/laporan"
                         element={
                             <ProtectedRoute allowedRoles={['pemilik', 'admin']}>
-                                <PlaceholderPage title="Laporan Bulanan" />
+                                <Laporan />
                             </ProtectedRoute>
                         }
                     />
                     <Route
-                        path="/admin/pengaturan"
+                        path="/admin/laporan-bulanan"
                         element={
                             <ProtectedRoute allowedRoles={['pemilik', 'admin']}>
-                                <PlaceholderPage title="Pengaturan Sistem" />
+                                <LaporanBulanan />
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/admin/pegawai"
+                        element={
+                            <ProtectedRoute allowedRoles={['pemilik', 'admin']}>
+                                <Pegawai />
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/admin/fasilitas"
+                        element={
+                            <ProtectedRoute allowedRoles={['pemilik', 'admin']}>
+                                <Fasilitas />
                             </ProtectedRoute>
                         }
                     />
@@ -134,6 +149,8 @@ function App() {
                     <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
                 </Routes>
             </BrowserRouter>
+                </ToastProvider>
+            </BranchProvider>
         </AuthProvider>
     );
 }
