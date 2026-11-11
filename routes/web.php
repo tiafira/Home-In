@@ -7,14 +7,11 @@ use Illuminate\Support\Facades\Route;
 | Web Routes
 |--------------------------------------------------------------------------
 |
-| Landing page at root (/), and all other non-API routes are handled
-| by the React Router SPA application.
+| The entire frontend is handled by the React Router SPA application.
+| This includes the Public Website (Beranda, Kamar, Cabang, FAQ, Booking),
+| Auth pages (Login, Register), and Admin Dashboard.
 |
 */
-
-Route::get('/', function () {
-    return view('landing');
-});
 
 Route::get('/{any?}', function () {
     return view('app');

@@ -58,8 +58,13 @@ class FasilitasController extends Controller
             'nama_fasilitas' => 'required|string|max:100',
             'deskripsi' => 'nullable|string',
             'tipe' => 'required|in:default,tambahan',
+            'kategori_biaya' => 'nullable|in:per_bulan,sekali_bayar',
             'biaya_tambahan' => 'required|numeric|min:0',
+            'harga_barang' => 'nullable|numeric|min:0',
         ]);
+
+        $validated['kategori_biaya'] = $validated['kategori_biaya'] ?? 'per_bulan';
+        $validated['harga_barang'] = $validated['harga_barang'] ?? 0;
 
         $fasilitas = Fasilitas::create($validated);
 
@@ -81,7 +86,9 @@ class FasilitasController extends Controller
             'nama_fasilitas' => 'required|string|max:100',
             'deskripsi' => 'nullable|string',
             'tipe' => 'required|in:default,tambahan',
+            'kategori_biaya' => 'nullable|in:per_bulan,sekali_bayar',
             'biaya_tambahan' => 'required|numeric|min:0',
+            'harga_barang' => 'nullable|numeric|min:0',
         ]);
 
         $fasilitas->update($validated);

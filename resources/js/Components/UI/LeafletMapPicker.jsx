@@ -22,6 +22,7 @@ export default function LeafletMapPicker({
     latitude = -6.8869,
     longitude = 107.5356,
     onChange,
+    onLocationSelect,
     interactive = true,
     height = '280px',
     zoom = 16,
@@ -29,6 +30,7 @@ export default function LeafletMapPicker({
     const mapContainerRef = useRef(null);
     const mapInstanceRef = useRef(null);
     const markerRef = useRef(null);
+    const callback = onChange || onLocationSelect;
 
     // Reverse geocode helper (Nominatim)
     const reverseGeocode = async (lat, lng) => {
@@ -44,17 +46,17 @@ export default function LeafletMapPicker({
     };
 
     const handleLocationSelected = async (lat, lng) => {
-        if (!onChange) return;
+        if (!callback) return;
         const fixedLat = parseFloat(Number(lat).toFixed(7));
         const fixedLng = parseFloat(Number(lng).toFixed(7));
 
         // Immediately update lat/lng
-        onChange({ lat: fixedLat, lng: fixedLng, address: '' });
+        callback({ lat: fixedLat, lng: fixedLng, address: '' });
 
         // Then try reverse geocoding
         const address = await reverseGeocode(fixedLat, fixedLng);
         if (address) {
-            onChange({ lat: fixedLat, lng: fixedLng, address });
+            callback({ lat: fixedLat, lng: fixedLng, address });
         }
     };
 

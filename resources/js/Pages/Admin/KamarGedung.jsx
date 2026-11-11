@@ -1,55 +1,27 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import AdminLayout from '../../Layouts/AdminLayout';
 import Modal from '../../Components/UI/Modal';
 import ConfirmDialog from '../../Components/UI/ConfirmDialog';
 import StatusBadge from '../../Components/UI/StatusBadge';
 import LeafletMapPicker from '../../Components/UI/LeafletMapPicker';
+import CabangSettingsTab from './CabangSettingsTab';
 import { useToast } from '../../context/ToastContext';
 import { useBranch } from '../../context/BranchContext';
+import { parseLatLngFromInput } from '../../utils/geoUtils';
 import api from '../../services/api';
-
-/**
- * Helper to extract latitude & longitude from a Google Maps URL or "lat, lng" string
- */
-function parseLatLngFromInput(input) {
-    if (!input || typeof input !== 'string') return null;
-    const trimmed = input.trim();
-
-    // 1. Direct "lat, lng" format e.g. "-6.8869, 107.5356"
-    const directMatch = trimmed.match(/^(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)$/);
-    if (directMatch) {
-        return { lat: parseFloat(directMatch[1]), lng: parseFloat(directMatch[2]) };
-    }
-
-    // 2. Google Maps URL with @lat,lng e.g. https://www.google.com/maps/place/.../@-6.8869,107.5356,17z
-    const atMatch = trimmed.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
-    if (atMatch) {
-        return { lat: parseFloat(atMatch[1]), lng: parseFloat(atMatch[2]) };
-    }
-
-    // 3. Google Maps URL with ?q=lat,lng or &q=lat,lng or !3dlat!4dlng
-    const qMatch = trimmed.match(/[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/);
-    if (qMatch) {
-        return { lat: parseFloat(qMatch[1]), lng: parseFloat(qMatch[2]) };
-    }
-
-    const bangMatch = trimmed.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
-    if (bangMatch) {
-        return { lat: parseFloat(bangMatch[1]), lng: parseFloat(bangMatch[2]) };
-    }
-
-    return null;
-}
 
 export default function KamarGedung() {
     const toast = useToast();
     const { activeBranchId } = useBranch();
+    const [searchParams] = useSearchParams();
 
     const [kamars, setKamars] = useState([]);
     const [gedungs, setGedungs] = useState([]);
     const [cabangs, setCabangs] = useState([]);
     const [counts, setCounts] = useState({ total: 0, kosong: 0, terisi: 0, dibooking: 0, maintenance: 0 });
     const [loading, setLoading] = useState(true);
+    const [activeSection, setActiveSection] = useState('kamar_gedung'); // 'kamar_gedung' | 'pengaturan_cabang'
 
     // Filters
     const [filterGedung, setFilterGedung] = useState('');
@@ -80,7 +52,22 @@ export default function KamarGedung() {
         status: 'kosong',
         deskripsi: '',
     });
+    const [kamarFotoFile, setKamarFotoFile] = useState(null);
+    const [kamarFotoPreview, setKamarFotoPreview] = useState(null);
     const [submittingKamar, setSubmittingKamar] = useState(false);
+
+    // Bulk Add Kamar Modal
+    const [bulkModalOpen, setBulkModalOpen] = useState(false);
+    const [bulkForm, setBulkForm] = useState({
+        gedung_id: '',
+        lantai: 1,
+        harga_bulanan: 600000,
+        jumlah_kamar: 5,
+        deskripsi: '',
+    });
+    const [bulkFotoFile, setBulkFotoFile] = useState(null);
+    const [bulkFotoPreview, setBulkFotoPreview] = useState(null);
+    const [submittingBulk, setSubmittingBulk] = useState(false);
 
     // Add/Edit Gedung Modal
     const [gedungModalOpen, setGedungModalOpen] = useState(false);
@@ -94,6 +81,8 @@ export default function KamarGedung() {
         longitude: 107.5356,
         link_gmaps: '',
     });
+    const [gedungFotoFile, setGedungFotoFile] = useState(null);
+    const [gedungFotoPreview, setGedungFotoPreview] = useState(null);
     const [mapSearchQuery, setMapSearchQuery] = useState('');
     const [searchingMap, setSearchingMap] = useState(false);
     const [submittingGedung, setSubmittingGedung] = useState(false);
@@ -125,6 +114,15 @@ export default function KamarGedung() {
         fetchData();
     }, [fetchData]);
 
+    useEffect(() => {
+        if (searchParams.get('tab') === 'gedung') {
+            const el = document.getElementById('gedung-section');
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth' });
+            }
+        }
+    }, [searchParams]);
+
     const handleOpenAddKamar = () => {
         setEditingKamar(null);
         setKamarForm({
@@ -135,6 +133,8 @@ export default function KamarGedung() {
             status: 'kosong',
             deskripsi: '',
         });
+        setKamarFotoFile(null);
+        setKamarFotoPreview(null);
         setKamarModalOpen(true);
     };
 
@@ -148,18 +148,52 @@ export default function KamarGedung() {
             status: k.status,
             deskripsi: k.deskripsi || '',
         });
+        setKamarFotoFile(null);
+        setKamarFotoPreview(k.kamar_foto?.[0]?.url_foto || null);
         setKamarModalOpen(true);
+    };
+
+    const handleOpenAddBulk = () => {
+        setBulkForm({
+            gedung_id: gedungs[0]?.id || '',
+            lantai: 1,
+            harga_bulanan: 600000,
+            jumlah_kamar: 5,
+            deskripsi: '',
+        });
+        setBulkFotoFile(null);
+        setBulkFotoPreview(null);
+        setBulkModalOpen(true);
     };
 
     const handleSubmitKamar = async (e) => {
         e.preventDefault();
+        if (!editingKamar && !kamarFotoFile) {
+            toast.warning('Foto kamar wajib diunggah.');
+            return;
+        }
+
         setSubmittingKamar(true);
         try {
+            const formData = new FormData();
+            formData.append('gedung_id', kamarForm.gedung_id);
+            formData.append('nomor_kamar', kamarForm.nomor_kamar);
+            formData.append('lantai', kamarForm.lantai);
+            formData.append('harga_bulanan', kamarForm.harga_bulanan);
+            formData.append('status', kamarForm.status);
+            if (kamarForm.deskripsi) formData.append('deskripsi', kamarForm.deskripsi);
+            if (kamarFotoFile) formData.append('foto', kamarFotoFile);
+
             if (editingKamar) {
-                await api.put(`/admin/kamar/${editingKamar.id}`, kamarForm);
+                formData.append('_method', 'PUT');
+                await api.post(`/admin/kamar/${editingKamar.id}`, formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' },
+                });
                 toast.success('Data kamar berhasil diperbarui!');
             } else {
-                await api.post('/admin/kamar', kamarForm);
+                await api.post('/admin/kamar', formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' },
+                });
                 toast.success('Kamar baru berhasil ditambahkan!');
             }
             setKamarModalOpen(false);
@@ -168,6 +202,36 @@ export default function KamarGedung() {
             toast.error(err.response?.data?.message || 'Gagal menyimpan kamar.');
         } finally {
             setSubmittingKamar(false);
+        }
+    };
+
+    const handleSubmitBulk = async (e) => {
+        e.preventDefault();
+        if (!bulkFotoFile) {
+            toast.warning('Foto kamar wajib diunggah untuk kelengkapan kamar massal.');
+            return;
+        }
+
+        setSubmittingBulk(true);
+        try {
+            const formData = new FormData();
+            formData.append('gedung_id', bulkForm.gedung_id);
+            formData.append('lantai', bulkForm.lantai);
+            formData.append('harga_bulanan', bulkForm.harga_bulanan);
+            formData.append('jumlah_kamar', bulkForm.jumlah_kamar);
+            if (bulkForm.deskripsi) formData.append('deskripsi', bulkForm.deskripsi);
+            formData.append('foto', bulkFotoFile);
+
+            const res = await api.post('/admin/kamar/bulk', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+            });
+            toast.success(res.data?.message || 'Kamar berhasil ditambahkan secara massal!');
+            setBulkModalOpen(false);
+            fetchData();
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Gagal menambahkan kamar massal.');
+        } finally {
+            setSubmittingBulk(false);
         }
     };
 
@@ -189,82 +253,156 @@ export default function KamarGedung() {
 
     const handleUpdateStatusKamar = async (kamarId, newStatus) => {
         try {
-            await api.post(`/admin/kamar/${kamarId}/status`, { status: newStatus });
-            toast.success(`Status kamar diubah ke ${newStatus}.`);
+            const res = await api.post(`/admin/kamar/${kamarId}/status`, { status: newStatus });
+            toast.success(res.data?.message || `Status kamar diubah ke ${newStatus}.`);
             fetchData();
             if (selectedKamar && selectedKamar.id === kamarId) {
                 setSelectedKamar((prev) => ({ ...prev, status: newStatus }));
             }
         } catch (err) {
-            toast.error('Gagal mengubah status kamar.');
+            toast.error(err.response?.data?.message || 'Gagal mengubah status kamar.');
+        }
+    };
+
+    const handleToggleKamarAvailability = async (kamar, e) => {
+        if (e) e.stopPropagation();
+        if (kamar.status === 'terisi' || kamar.status === 'dibooking') {
+            toast.warning(`Kamar ${kamar.nomor_kamar} sedang ${kamar.status} dan tidak dapat di-toggle.`);
+            return;
+        }
+
+        const targetStatus = kamar.status === 'kosong' ? 'maintenance' : 'kosong';
+        try {
+            const res = await api.post(`/admin/kamar/${kamar.id}/status`, { status: targetStatus });
+            toast.success(res.data?.message || `Status kamar ${kamar.nomor_kamar} berhasil diubah.`);
+            fetchData();
+            if (selectedKamar && selectedKamar.id === kamar.id) {
+                setSelectedKamar((prev) => ({ ...prev, status: targetStatus }));
+            }
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Gagal mengubah ketersediaan kamar.');
         }
     };
 
     const handleOpenAddGedung = () => {
         setEditingGedung(null);
-        const defaultCabangId = activeBranchId || gedungs[0]?.cabang_id || cabangs[0]?.id || 1;
-        const selectedCabang = cabangs.find((c) => Number(c.id) === Number(defaultCabangId));
         setGedungForm({
-            cabang_id: defaultCabangId,
+            cabang_id: null,
             nama_gedung: '',
             jumlah_lantai: 2,
-            alamat: selectedCabang?.alamat || '',
-            latitude: selectedCabang?.latitude ? Number(selectedCabang.latitude) : -6.8869,
-            longitude: selectedCabang?.longitude ? Number(selectedCabang.longitude) : 107.5356,
+            alamat: '',
+            latitude: -6.8869,
+            longitude: 107.5356,
             link_gmaps: '',
         });
+        setGedungFotoFile(null);
+        setGedungFotoPreview(null);
         setMapSearchQuery('');
         setGedungModalOpen(true);
     };
 
     const handleOpenEditGedung = (gedung) => {
         setEditingGedung(gedung);
-        const lat = gedung.latitude ?? gedung.cabang?.latitude ?? -6.8869;
-        const lng = gedung.longitude ?? gedung.cabang?.longitude ?? 107.5356;
+        const lat = gedung.latitude ?? -6.8869;
+        const lng = gedung.longitude ?? 107.5356;
         setGedungForm({
-            cabang_id: gedung.cabang_id,
+            cabang_id: gedung.cabang_id ?? null,
             nama_gedung: gedung.nama_gedung || '',
             jumlah_lantai: gedung.jumlah_lantai || 2,
-            alamat: gedung.alamat || gedung.cabang?.alamat || '',
+            alamat: gedung.alamat || '',
             latitude: Number(lat),
             longitude: Number(lng),
             link_gmaps: gedung.link_gmaps || `https://www.google.com/maps?q=${lat},${lng}`,
         });
+        setGedungFotoFile(null);
+        setGedungFotoPreview(gedung.url_foto || gedung.foto || null);
         setMapSearchQuery('');
         setGedungModalOpen(true);
     };
 
-    const handleSearchLocationOnMap = async () => {
-        const query = mapSearchQuery.trim() || gedungForm.alamat.trim();
+    const handleResolveLocation = async (rawInput) => {
+        const query = (rawInput ?? mapSearchQuery ?? gedungForm.link_gmaps ?? gedungForm.alamat ?? '').trim();
         if (!query) {
-            toast.warning('Masukkan nama jalan/lokasi atau alamat terlebih dahulu untuk mencari di peta.');
+            toast.warning('Masukkan link Google Maps, koordinat, atau nama tempat terlebih dahulu.');
             return;
         }
+
+        // 1. First attempt: instant client-side parse (for direct coords e.g. "-6.8869, 107.5356" or standard gmaps URLs)
+        const clientParsed = parseLatLngFromInput(query);
+        if (clientParsed) {
+            const { lat, lng } = clientParsed;
+            setGedungForm((prev) => ({
+                ...prev,
+                latitude: lat,
+                longitude: lng,
+                link_gmaps: query.startsWith('http') ? query : `https://www.google.com/maps?q=${lat},${lng}`,
+            }));
+            toast.success(`Titik koordinat berhasil dideteksi (${lat}, ${lng})!`);
+            return;
+        }
+
+        // 2. Second attempt: server-side resolver (handles shortened maps.app.goo.gl, goo.gl/maps, or Nominatim search)
         setSearchingMap(true);
         try {
-            const response = await fetch(
-                `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1&countrycodes=id`
-            );
-            const results = await response.json();
-            if (results && results.length > 0) {
-                const place = results[0];
-                const lat = parseFloat(Number(place.lat).toFixed(7));
-                const lng = parseFloat(Number(place.lon).toFixed(7));
+            const res = await api.post('/admin/gedung/resolve-location', { input: query });
+            if (res.data?.status === 'success' && res.data?.data) {
+                const { latitude, longitude, display_name, link_gmaps } = res.data.data;
+                const lat = parseFloat(Number(latitude).toFixed(7));
+                const lng = parseFloat(Number(longitude).toFixed(7));
                 setGedungForm((prev) => ({
                     ...prev,
                     latitude: lat,
                     longitude: lng,
-                    alamat: prev.alamat || place.display_name,
-                    link_gmaps: `https://www.google.com/maps?q=${lat},${lng}`,
+                    alamat: prev.alamat || display_name || prev.alamat,
+                    link_gmaps: link_gmaps || (query.startsWith('http') ? query : `https://www.google.com/maps?q=${lat},${lng}`),
                 }));
-                toast.success('Titik lokasi ditemukan di peta!');
+                toast.success(`Titik lokasi Google Maps berhasil ditemukan (${lat}, ${lng})!`);
             } else {
-                toast.warning('Lokasi tidak ditemukan secara otomatis. Anda juga dapat menempelkan link Google Maps atau mengisi koordinat.');
+                toast.warning('Lokasi tidak ditemukan. Silakan buka Google Maps, klik kanan lokasi gedung, lalu salin angka koordinat (contoh: -6.8869, 107.5356).');
             }
-        } catch (e) {
-            toast.error('Gagal mencari lokasi. Silakan tempel link Google Maps atau koordinat.');
+        } catch (err) {
+            toast.warning(err.response?.data?.message || 'Tidak dapat mendeteksi lokasi otomatis. Silakan salin koordinat langsung dari Google Maps.');
         } finally {
             setSearchingMap(false);
+        }
+    };
+
+    const handleCoordinatePaste = (e) => {
+        const pastedText = e.clipboardData.getData('text');
+        if (!pastedText) return;
+
+        const parsed = parseLatLngFromInput(pastedText);
+        if (parsed) {
+            e.preventDefault();
+            setGedungForm((prev) => ({
+                ...prev,
+                latitude: parsed.lat,
+                longitude: parsed.lng,
+                link_gmaps: `https://www.google.com/maps?q=${parsed.lat},${parsed.lng}`,
+            }));
+            toast.success(`Koordinat berhasil dipaste (${parsed.lat}, ${parsed.lng})!`);
+        }
+    };
+
+    const handleGmapsLinkChange = (value) => {
+        const parsed = parseLatLngFromInput(value);
+        if (parsed) {
+            setGedungForm((prev) => ({
+                ...prev,
+                link_gmaps: value,
+                latitude: parsed.lat,
+                longitude: parsed.lng,
+            }));
+            toast.info(`Koordinat terdeteksi (${parsed.lat}, ${parsed.lng})`);
+        } else {
+            setGedungForm((prev) => ({
+                ...prev,
+                link_gmaps: value,
+            }));
+            // If it's a URL, attempt automatic resolve after slight debounce
+            if (value.startsWith('http') && (value.includes('goo.gl') || value.includes('google.') || value.includes('maps'))) {
+                handleResolveLocation(value);
+            }
         }
     };
 
@@ -291,34 +429,36 @@ export default function KamarGedung() {
         );
     };
 
-    const handleGmapsLinkChange = (value) => {
-        const parsed = parseLatLngFromInput(value);
-        if (parsed) {
-            setGedungForm((prev) => ({
-                ...prev,
-                link_gmaps: value,
-                latitude: parsed.lat,
-                longitude: parsed.lng,
-            }));
-            toast.info(`Koordinat terdeteksi dari link: ${parsed.lat}, ${parsed.lng}`);
-        } else {
-            setGedungForm((prev) => ({
-                ...prev,
-                link_gmaps: value,
-            }));
-        }
-    };
-
     const handleSubmitGedung = async (e) => {
         e.preventDefault();
+        if (!editingGedung && !gedungFotoFile) {
+            toast.warning('Foto tampak depan gedung wajib diunggah.');
+            return;
+        }
+
         setSubmittingGedung(true);
         try {
+            const formData = new FormData();
+            if (gedungForm.cabang_id) formData.append('cabang_id', gedungForm.cabang_id);
+            formData.append('nama_gedung', gedungForm.nama_gedung);
+            formData.append('jumlah_lantai', gedungForm.jumlah_lantai);
+            formData.append('alamat', gedungForm.alamat);
+            if (gedungForm.latitude !== null && gedungForm.latitude !== undefined) formData.append('latitude', gedungForm.latitude);
+            if (gedungForm.longitude !== null && gedungForm.longitude !== undefined) formData.append('longitude', gedungForm.longitude);
+            if (gedungForm.link_gmaps) formData.append('link_gmaps', gedungForm.link_gmaps);
+            if (gedungFotoFile) formData.append('foto', gedungFotoFile);
+
             if (editingGedung) {
-                await api.put(`/admin/gedung/${editingGedung.id}`, gedungForm);
+                formData.append('_method', 'PUT');
+                await api.post(`/admin/gedung/${editingGedung.id}`, formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' },
+                });
                 toast.success('Data gedung & lokasi Google Maps berhasil diperbarui!');
             } else {
-                await api.post('/admin/gedung', gedungForm);
-                toast.success('Gedung baru beserta lokasi Google Maps berhasil ditambahkan!');
+                await api.post('/admin/gedung', formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' },
+                });
+                toast.success('Gedung baru beserta foto & lokasi berhasil ditambahkan!');
             }
             setGedungModalOpen(false);
             fetchData();
@@ -352,30 +492,35 @@ export default function KamarGedung() {
                     bg: 'bg-emerald-50 hover:bg-emerald-100/80 border-emerald-300 text-emerald-800',
                     dot: 'bg-emerald-500',
                     tag: 'bg-emerald-100 text-emerald-800',
+                    badge: 'Tersedia',
                 };
             case 'terisi':
                 return {
-                    bg: 'bg-rose-50 hover:bg-rose-100/80 border-rose-300 text-rose-800',
-                    dot: 'bg-rose-500',
-                    tag: 'bg-rose-100 text-rose-800',
+                    bg: 'bg-blue-50 hover:bg-blue-100/80 border-blue-300 text-[#1E5FC9]',
+                    dot: 'bg-[#1E5FC9]',
+                    tag: 'bg-blue-100 text-[#1E5FC9]',
+                    badge: 'Terisi',
                 };
             case 'dibooking':
                 return {
                     bg: 'bg-amber-50 hover:bg-amber-100/80 border-amber-300 text-amber-800',
                     dot: 'bg-amber-500',
                     tag: 'bg-amber-100 text-amber-800',
+                    badge: 'Dibooking',
                 };
             case 'maintenance':
                 return {
                     bg: 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-700',
                     dot: 'bg-slate-500',
                     tag: 'bg-slate-200 text-slate-700',
+                    badge: 'Maintenance',
                 };
             default:
                 return {
                     bg: 'bg-slate-50 border-slate-200 text-slate-800',
                     dot: 'bg-slate-400',
                     tag: 'bg-slate-100 text-slate-700',
+                    badge: status,
                 };
         }
     };
@@ -402,8 +547,38 @@ export default function KamarGedung() {
             title="Kamar & Gedung"
             subtitle="Tata letak visual denah kamar, status okupansi real-time, serta manajemen gedung & titik lokasi Google Maps."
         >
-            {/* Top Stat Summary Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3.5 mb-6">
+            {/* Top Switcher: Denah Kamar vs Pengaturan Cabang */}
+            <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-2xl mb-6 self-start w-fit">
+                <button
+                    type="button"
+                    onClick={() => setActiveSection('kamar_gedung')}
+                    className={`px-4 py-2 rounded-xl text-sm font-semibold transition cursor-pointer ${
+                        activeSection === 'kamar_gedung'
+                            ? 'bg-white text-slate-800 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                >
+                    🏢 Denah Kamar & Gedung
+                </button>
+                <button
+                    type="button"
+                    onClick={() => setActiveSection('pengaturan_cabang')}
+                    className={`px-4 py-2 rounded-xl text-sm font-semibold transition flex items-center gap-1.5 cursor-pointer ${
+                        activeSection === 'pengaturan_cabang'
+                            ? 'bg-white text-[#1E5FC9] shadow-sm'
+                            : 'text-slate-500 hover:text-[#1E5FC9]'
+                    }`}
+                >
+                    <span>⚙️ Pengaturan Cabang & Rekening</span>
+                </button>
+            </div>
+
+            {activeSection === 'pengaturan_cabang' ? (
+                <CabangSettingsTab />
+            ) : (
+                <>
+                    {/* Top Stat Summary Cards */}
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3.5 mb-6">
                 <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
                     <span className="text-xs text-slate-500 font-medium block">Total Kamar</span>
                     <span className="text-2xl font-bold text-slate-800 mt-1 block">{counts.total}</span>
@@ -439,10 +614,10 @@ export default function KamarGedung() {
                 <div className="flex flex-wrap items-center gap-3">
                     <input
                         type="text"
-                        placeholder="Cari nomor kamar..."
+                        placeholder="Cari kamar, gedung, daerah..."
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
-                        className="px-3 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-[#263b53] w-48"
+                        className="px-3 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-[#263b53] w-64"
                     />
 
                     <select
@@ -481,6 +656,14 @@ export default function KamarGedung() {
                     </button>
                     <button
                         type="button"
+                        onClick={handleOpenAddBulk}
+                        className="px-3.5 py-2 text-sm font-semibold text-[#1E5FC9] bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl transition cursor-pointer flex items-center gap-1.5"
+                    >
+                        <span>⚡</span>
+                        <span>+ Tambah Massal</span>
+                    </button>
+                    <button
+                        type="button"
                         onClick={handleOpenAddKamar}
                         className="px-4 py-2 text-sm font-semibold text-white bg-[#263b53] hover:bg-[#1b2c3f] rounded-xl shadow-sm transition cursor-pointer"
                     >
@@ -497,10 +680,10 @@ export default function KamarGedung() {
                 </div>
             ) : groupedRooms.length === 0 ? (
                 <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-500">
-                    Belum ada gedung atau kamar terdaftar pada cabang ini.
+                    Belum ada gedung atau kamar yang terdaftar. Silakan klik "+ Tambah Gedung" untuk mulai menambahkan.
                 </div>
             ) : (
-                <div className="space-y-6">
+                <div id="gedung-section" className="space-y-6">
                     {groupedRooms.map(({ gedung, floors, totalRooms }) => {
                         const alamatGedung = gedung.alamat || gedung.cabang?.alamat || 'Alamat belum diatur';
                         const lat = gedung.latitude ?? gedung.cabang?.latitude;
@@ -512,45 +695,59 @@ export default function KamarGedung() {
 
                         return (
                             <div key={gedung.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-                                <div className="flex flex-col md:flex-row md:items-start justify-between border-b border-slate-100 pb-4 mb-4 gap-3">
-                                    <div>
-                                        <div className="flex flex-wrap items-center gap-2">
-                                            <h3 className="text-lg font-bold text-[#263b53]">{gedung.nama_gedung}</h3>
-                                            <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 font-semibold">
-                                                {totalRooms} kamar
-                                            </span>
-                                            <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-50 text-[#263b53] font-semibold">
-                                                {gedung.jumlah_lantai} Lantai
-                                            </span>
-                                        </div>
+                                <div className="flex flex-col md:flex-row md:items-start justify-between border-b border-slate-100 pb-4 mb-4 gap-4">
+                                    <div className="flex items-start gap-4">
+                                        {gedung.url_foto || gedung.foto ? (
+                                            <img
+                                                src={gedung.url_foto || gedung.foto}
+                                                alt={gedung.nama_gedung}
+                                                className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover border border-slate-200 shadow-sm shrink-0"
+                                            />
+                                        ) : (
+                                            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-slate-100 border border-slate-200 flex flex-col items-center justify-center text-slate-400 text-xs shrink-0 font-bold">
+                                                <span className="text-xl">🏢</span>
+                                                <span className="text-[10px] text-slate-400">Gedung</span>
+                                            </div>
+                                        )}
+                                        <div>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <h3 className="text-lg font-bold text-[#263b53]">{gedung.nama_gedung}</h3>
+                                                <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 font-semibold">
+                                                    {totalRooms} kamar
+                                                </span>
+                                                <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-50 text-[#263b53] font-semibold">
+                                                    {gedung.jumlah_lantai} Lantai
+                                                </span>
+                                            </div>
 
-                                        {/* Alamat Gedung & Koordinat */}
-                                        <div className="flex items-start gap-1.5 mt-2 text-xs text-slate-600">
-                                            <svg
-                                                className="w-4 h-4 text-rose-500 shrink-0 mt-0.5"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                strokeWidth="2"
-                                                viewBox="0 0 24 24"
-                                            >
-                                                <path
-                                                    strokeLinecap="round"
-                                                    strokeLinejoin="round"
-                                                    d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"
-                                                />
-                                                <path
-                                                    strokeLinecap="round"
-                                                    strokeLinejoin="round"
-                                                    d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z"
-                                                />
-                                            </svg>
-                                            <div>
-                                                <span className="font-medium text-slate-700">{alamatGedung}</span>
-                                                {lat && lng && (
-                                                    <span className="ml-2 text-[11px] text-slate-400">
-                                                        ({Number(lat).toFixed(5)}, {Number(lng).toFixed(5)})
-                                                    </span>
-                                                )}
+                                            {/* Alamat Gedung & Koordinat */}
+                                            <div className="flex items-start gap-1.5 mt-2 text-xs text-slate-600">
+                                                <svg
+                                                    className="w-4 h-4 text-rose-500 shrink-0 mt-0.5"
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    strokeWidth="2"
+                                                    viewBox="0 0 24 24"
+                                                >
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"
+                                                    />
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z"
+                                                    />
+                                                </svg>
+                                                <div>
+                                                    <span className="font-medium text-slate-700">{alamatGedung}</span>
+                                                    {lat && lng && (
+                                                        <span className="ml-2 text-[11px] text-slate-400">
+                                                            ({Number(lat).toFixed(5)}, {Number(lng).toFixed(5)})
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -604,10 +801,13 @@ export default function KamarGedung() {
                                         <button
                                             type="button"
                                             onClick={() => setDeleteGedungTarget(gedung)}
-                                            className="px-2.5 py-1.5 text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl transition cursor-pointer"
-                                            title="Hapus Gedung"
+                                            className="px-3 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition cursor-pointer flex items-center gap-1.5"
+                                            title="Hapus Seluruh Gedung Beserta Lokasinya"
                                         >
-                                            Hapus
+                                            <svg className="w-3.5 h-3.5 text-rose-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                                            </svg>
+                                            <span>Hapus Gedung</span>
                                         </button>
                                     </div>
                                 </div>
@@ -660,6 +860,7 @@ export default function KamarGedung() {
                                                 <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
                                                     {rooms.map((k) => {
                                                         const style = getStatusStyle(k.status);
+                                                        const canToggle = ['kosong', 'maintenance'].includes(k.status);
                                                         return (
                                                             <div
                                                                 key={k.id}
@@ -669,19 +870,59 @@ export default function KamarGedung() {
                                                                 }}
                                                                 className={`p-3 rounded-xl border cursor-pointer transition-all hover:scale-[1.02] shadow-sm flex flex-col justify-between ${style.bg}`}
                                                             >
-                                                                <div className="flex items-start justify-between mb-1.5">
-                                                                    <span className="font-bold text-sm tracking-tight">
-                                                                        {k.nomor_kamar}
-                                                                    </span>
-                                                                    <span className={`w-2 h-2 rounded-full ${style.dot}`} />
-                                                                </div>
                                                                 <div>
-                                                                    <div className="text-[10px] font-medium opacity-80 capitalize">
-                                                                        {k.status}
+                                                                    <div className="flex items-start justify-between mb-1.5">
+                                                                        <span className="font-bold text-sm tracking-tight">
+                                                                            {k.nomor_kamar}
+                                                                        </span>
+                                                                        <span className={`w-2 h-2 rounded-full ${style.dot}`} />
                                                                     </div>
-                                                                    <div className="text-[11px] font-semibold mt-1">
+                                                                    <div className="text-[10px] font-semibold opacity-90">
+                                                                        {style.badge}
+                                                                    </div>
+                                                                    <div className="text-[11px] font-semibold mt-0.5">
                                                                         Rp {Number(k.harga_bulanan / 1000).toLocaleString('id-ID')}rb
                                                                     </div>
+                                                                </div>
+
+                                                                {/* Toggle Tersedia / Maintenance & Delete Kamar */}
+                                                                <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-black/5">
+                                                                    <div className="flex items-center gap-1.5">
+                                                                        <span className="text-[9px] font-semibold uppercase tracking-wider opacity-70">
+                                                                            {k.status === 'kosong' ? 'Aktif' : k.status === 'maintenance' ? 'Perbaikan' : 'Terkunci'}
+                                                                        </span>
+                                                                        {k.status !== 'terisi' && (
+                                                                            <button
+                                                                                type="button"
+                                                                                title={`Hapus Kamar ${k.nomor_kamar}`}
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    setDeleteKamarTarget(k);
+                                                                                }}
+                                                                                className="p-1 rounded-md text-rose-500 hover:text-rose-700 hover:bg-rose-100 transition cursor-pointer"
+                                                                            >
+                                                                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                                                </svg>
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
+                                                                    {canToggle ? (
+                                                                        <button
+                                                                            type="button"
+                                                                            title={`Klik untuk ubah ke ${k.status === 'kosong' ? 'Maintenance' : 'Kosong (Tersedia)'}`}
+                                                                            onClick={(e) => handleToggleKamarAvailability(k, e)}
+                                                                            className={`w-7 h-4 rounded-full transition-colors p-0.5 flex items-center cursor-pointer ${
+                                                                                k.status === 'kosong' ? 'bg-emerald-600 justify-end' : 'bg-slate-400 justify-start'
+                                                                            }`}
+                                                                        >
+                                                                            <div className="w-3 h-3 rounded-full bg-white shadow-sm" />
+                                                                        </button>
+                                                                    ) : (
+                                                                        <span className="text-[10px]" title="Kamar sedang terisi atau dibooking (status terkunci)">
+                                                                            🔒
+                                                                        </span>
+                                                                    )}
                                                                 </div>
                                                             </div>
                                                         );
@@ -695,6 +936,8 @@ export default function KamarGedung() {
                         );
                     })}
                 </div>
+            )}
+                </>
             )}
 
             {/* DETAIL MODAL KAMAR */}
@@ -720,10 +963,14 @@ export default function KamarGedung() {
                                 {selectedKamar.status !== 'terisi' && (
                                     <button
                                         type="button"
-                                        onClick={() => setDeleteKamarTarget(selectedKamar)}
+                                        onClick={() => {
+                                            const target = selectedKamar;
+                                            setDetailModalOpen(false);
+                                            setDeleteKamarTarget(target);
+                                        }}
                                         className="px-3.5 py-2 text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl cursor-pointer"
                                     >
-                                        Hapus Kamar
+                                        Hapus Kamar Ini
                                     </button>
                                 )}
                             </div>
@@ -738,6 +985,17 @@ export default function KamarGedung() {
                     }
                 >
                     <div className="space-y-4">
+                        {/* Foto Kamar */}
+                        {selectedKamar.kamar_foto && selectedKamar.kamar_foto.length > 0 && (
+                            <div className="w-full h-44 rounded-2xl overflow-hidden border border-slate-200 shadow-sm">
+                                <img
+                                    src={selectedKamar.kamar_foto[0].url_foto}
+                                    alt={`Foto Kamar ${selectedKamar.nomor_kamar}`}
+                                    className="w-full h-full object-cover"
+                                />
+                            </div>
+                        )}
+
                         <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-xl border border-slate-200">
                             <div>
                                 <span className="text-xs text-slate-400 block mb-0.5">Status Saat Ini</span>
@@ -794,11 +1052,11 @@ export default function KamarGedung() {
                         </div>
 
                         {selectedKamar.penghuni && selectedKamar.penghuni.user && (
-                            <div className="p-3 bg-rose-50 border border-rose-100 rounded-xl text-sm">
-                                <span className="text-xs font-semibold text-rose-700 block mb-1">Penghuni Aktif:</span>
-                                <strong className="text-rose-900">{selectedKamar.penghuni.user.name}</strong>
-                                <div className="text-xs text-rose-700 mt-0.5">
-                                    {selectedKamar.penghuni.user.no_hp || '-'} • Masuk sejak:{' '}
+                            <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl text-sm">
+                                <span className="text-xs font-semibold text-[#1E5FC9] block mb-1">Penghuni Aktif:</span>
+                                <strong className="text-slate-800">{selectedKamar.penghuni.user?.nama || selectedKamar.penghuni.user?.name}</strong>
+                                <div className="text-xs text-slate-500 mt-0.5">
+                                    {selectedKamar.penghuni.user?.no_hp || '-'} • Masuk sejak:{' '}
                                     {selectedKamar.penghuni.tanggal_masuk}
                                 </div>
                             </div>
@@ -811,28 +1069,43 @@ export default function KamarGedung() {
                             </div>
                         )}
 
-                        {/* Quick Status Changer */}
-                        <div className="pt-2 border-t border-slate-100">
+                        {/* Toggle Ketersediaan Kamar (Kosong <-> Maintenance) */}
+                        <div className="pt-3 border-t border-slate-100">
                             <span className="text-xs font-semibold text-slate-700 block mb-2">
-                                Ubah Cepat Status Kamar:
+                                Kontrol Ketersediaan Kamar (Kosong ⟷ Maintenance):
                             </span>
-                            <div className="grid grid-cols-4 gap-2">
-                                {['kosong', 'terisi', 'dibooking', 'maintenance'].map((st) => (
+                            {['terisi', 'dibooking'].includes(selectedKamar.status) ? (
+                                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-center gap-2">
+                                    <span className="text-base">🔒</span>
+                                    <span>
+                                        Kamar ini sedang <strong>{selectedKamar.status}</strong>. Status kamar tidak dapat di-toggle secara manual karena terikat kontrak sewa / booking aktif.
+                                    </span>
+                                </div>
+                            ) : (
+                                <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                                    <div>
+                                        <div className="text-xs font-bold text-slate-800">
+                                            {selectedKamar.status === 'kosong' ? 'Tersedia untuk Booking (Kosong)' : 'Sedang Perbaikan (Maintenance)'}
+                                        </div>
+                                        <div className="text-[11px] text-slate-500">
+                                            {selectedKamar.status === 'kosong'
+                                                ? 'Calon penghuni dapat melihat dan membooking kamar ini.'
+                                                : 'Kamar disembunyikan dari pemesanan publik selama maintenance.'}
+                                        </div>
+                                    </div>
                                     <button
-                                        key={st}
                                         type="button"
-                                        disabled={selectedKamar.status === st}
-                                        onClick={() => handleUpdateStatusKamar(selectedKamar.id, st)}
-                                        className={`py-1.5 text-xs font-medium rounded-lg border transition capitalize cursor-pointer ${
-                                            selectedKamar.status === st
-                                                ? 'bg-slate-200 text-slate-400 border-slate-300 cursor-not-allowed'
-                                                : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-300'
+                                        onClick={() => handleToggleKamarAvailability(selectedKamar)}
+                                        className={`px-3 py-1.5 text-xs font-bold rounded-xl transition cursor-pointer shadow-sm ${
+                                            selectedKamar.status === 'kosong'
+                                                ? 'bg-amber-100 text-amber-800 hover:bg-amber-200 border border-amber-300'
+                                                : 'bg-emerald-600 text-white hover:bg-emerald-700'
                                         }`}
                                     >
-                                        {st}
+                                        {selectedKamar.status === 'kosong' ? 'Set Maintenance' : 'Set Tersedia'}
                                     </button>
-                                ))}
-                            </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </Modal>
@@ -932,12 +1205,51 @@ export default function KamarGedung() {
                     <div>
                         <label className="block text-xs font-semibold text-slate-700 mb-1">Deskripsi Tambahan</label>
                         <textarea
-                            rows={3}
+                            rows={2}
                             placeholder="Catatan fasilitas khusus (AC, kamar mandi dalam, balkon)..."
                             value={kamarForm.deskripsi}
                             onChange={(e) => setKamarForm({ ...kamarForm, deskripsi: e.target.value })}
                             className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl"
                         />
+                    </div>
+
+                    {/* Foto Kamar (Wajib untuk input baru) */}
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">
+                            Foto Kamar Kost {!editingKamar && <span className="text-rose-500">* (Wajib)</span>}
+                        </label>
+                        <input
+                            type="file"
+                            accept="image/*"
+                            required={!editingKamar && !kamarFotoPreview}
+                            onChange={(e) => {
+                                const file = e.target.files[0];
+                                if (file) {
+                                    setKamarFotoFile(file);
+                                    setKamarFotoPreview(URL.createObjectURL(file));
+                                }
+                            }}
+                            className="w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-[#1E5FC9] hover:file:bg-blue-100 cursor-pointer"
+                        />
+                        {kamarFotoPreview && (
+                            <div className="mt-2 relative w-36 h-24 rounded-xl overflow-hidden border border-slate-200">
+                                <img src={kamarFotoPreview} alt="preview kamar" className="w-full h-full object-cover" />
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setKamarFotoFile(null);
+                                        setKamarFotoPreview(null);
+                                    }}
+                                    className="absolute top-1 right-1 bg-black/60 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] cursor-pointer"
+                                    title="Hapus foto"
+                                >
+                                    ✕
+                                </button>
+                            </div>
+                        )}
+                        <p className="text-[11px] text-slate-400 mt-1">
+                            Format JPG, PNG, WEBP. Maks 5 MB. Foto akan tampil di halaman detail kamar pemesan.
+                        </p>
                     </div>
 
                     <div className="flex justify-end gap-2 pt-2">
@@ -951,7 +1263,7 @@ export default function KamarGedung() {
                         <button
                             type="submit"
                             disabled={submittingKamar}
-                            className="px-4 py-2 text-sm font-semibold text-white bg-[#263b53] hover:bg-[#1b2c3f] rounded-xl shadow-sm cursor-pointer"
+                            className="px-4 py-2 text-sm font-semibold text-white bg-[#263b53] hover:bg-[#1b2c3f] rounded-xl shadow-sm cursor-pointer disabled:opacity-50"
                         >
                             {submittingKamar ? 'Menyimpan...' : 'Simpan Kamar'}
                         </button>
@@ -959,7 +1271,170 @@ export default function KamarGedung() {
                 </form>
             </Modal>
 
-            {/* ADD/EDIT GEDUNG MODAL (WITH ADDRESS & GOOGLE MAPS PICKER/PREVIEW) */}
+            {/* TAMBAH KAMAR MASSAL (BULK) PER LANTAI */}
+            <Modal
+                isOpen={bulkModalOpen}
+                onClose={() => setBulkModalOpen(false)}
+                title="⚡ Tambah Kamar Massal Otomatis per Lantai"
+                maxWidth="max-w-lg"
+            >
+                <form onSubmit={handleSubmitBulk} className="space-y-4">
+                    <div className="p-3.5 bg-blue-50/70 border border-blue-200 rounded-xl text-xs text-blue-900 leading-relaxed">
+                        <p className="font-bold flex items-center gap-1.5 mb-1">
+                            <span>💡</span>
+                            <span>Sistem Penomoran Kamar Otomatis:</span>
+                        </p>
+                        <p className="text-[11px] text-blue-800">
+                            Sistem akan otomatis menghasilkan nomor kamar sesuai lantai (contoh: Lantai 2 &rarr; 201, 202, 203, dst) dan melewati nomor yang sudah terdaftar.
+                        </p>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">Pilih Gedung</label>
+                        <select
+                            required
+                            value={bulkForm.gedung_id}
+                            onChange={(e) => setBulkForm({ ...bulkForm, gedung_id: e.target.value })}
+                            className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl bg-white"
+                        >
+                            <option value="">Pilih Gedung</option>
+                            {gedungs.map((g) => (
+                                <option key={g.id} value={g.id}>
+                                    {g.nama_gedung} ({g.jumlah_lantai} Lantai)
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">Pilih Lantai</label>
+                            <input
+                                type="number"
+                                required
+                                min="1"
+                                max={gedungs.find((g) => g.id === parseInt(bulkForm.gedung_id))?.jumlah_lantai || 20}
+                                value={bulkForm.lantai}
+                                onChange={(e) => setBulkForm({ ...bulkForm, lantai: parseInt(e.target.value) || 1 })}
+                                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">Jumlah Kamar</label>
+                            <input
+                                type="number"
+                                required
+                                min="1"
+                                max="50"
+                                value={bulkForm.jumlah_kamar}
+                                onChange={(e) => setBulkForm({ ...bulkForm, jumlah_kamar: parseInt(e.target.value) || 1 })}
+                                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Live Preview Nomor Kamar yang akan dibuat */}
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5">
+                        <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block">
+                            Preview Nomor Kamar yang Akan Dibuat:
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                            {Array.from({ length: Math.min(bulkForm.jumlah_kamar || 1, 15) }, (_, i) => {
+                                const num = (bulkForm.lantai * 100) + (i + 1);
+                                return (
+                                    <span key={num} className="px-2 py-0.5 rounded-md text-xs font-bold bg-[#263b53] text-white">
+                                        {num}
+                                    </span>
+                                );
+                            })}
+                            {(bulkForm.jumlah_kamar || 1) > 15 && (
+                                <span className="text-xs text-slate-500 font-semibold self-center">
+                                    ...dan {bulkForm.jumlah_kamar - 15} kamar lainnya
+                                </span>
+                            )}
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">Harga Bulanan Semua Kamar (Rp)</label>
+                        <input
+                            type="number"
+                            required
+                            min="0"
+                            step="10000"
+                            value={bulkForm.harga_bulanan}
+                            onChange={(e) => setBulkForm({ ...bulkForm, harga_bulanan: parseFloat(e.target.value) || 0 })}
+                            className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl"
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">Deskripsi Fasilitas (Sama untuk batch ini)</label>
+                        <textarea
+                            rows={2}
+                            placeholder="Contoh: Kamar Mandi Dalam, Kasur Busa, Jendela Menghadap Taman..."
+                            value={bulkForm.deskripsi}
+                            onChange={(e) => setBulkForm({ ...bulkForm, deskripsi: e.target.value })}
+                            className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl"
+                        />
+                    </div>
+
+                    {/* Foto Kamar Massal */}
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">
+                            Foto Kamar (Wajib • Digunakan untuk seluruh kamar batch ini) <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                            type="file"
+                            accept="image/*"
+                            required
+                            onChange={(e) => {
+                                const file = e.target.files[0];
+                                if (file) {
+                                    setBulkFotoFile(file);
+                                    setBulkFotoPreview(URL.createObjectURL(file));
+                                }
+                            }}
+                            className="w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-[#1E5FC9] hover:file:bg-blue-100 cursor-pointer"
+                        />
+                        {bulkFotoPreview && (
+                            <div className="mt-2 relative w-36 h-24 rounded-xl overflow-hidden border border-slate-200">
+                                <img src={bulkFotoPreview} alt="preview kamar massal" className="w-full h-full object-cover" />
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setBulkFotoFile(null);
+                                        setBulkFotoPreview(null);
+                                    }}
+                                    className="absolute top-1 right-1 bg-black/60 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] cursor-pointer"
+                                    title="Hapus foto"
+                                >
+                                    ✕
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-2">
+                        <button
+                            type="button"
+                            onClick={() => setBulkModalOpen(false)}
+                            className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                        >
+                            Batal
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={submittingBulk}
+                            className="px-5 py-2 text-sm font-semibold text-white bg-[#1E5FC9] hover:bg-[#184ea8] rounded-xl shadow-sm cursor-pointer disabled:opacity-50 flex items-center gap-2"
+                        >
+                            {submittingBulk ? 'Menambahkan Massal...' : `Buat ${bulkForm.jumlah_kamar} Kamar Sekaligus`}
+                        </button>
+                    </div>
+                </form>
+            </Modal>
+
+            {/* ADD/EDIT GEDUNG MODAL (WITH PHOTO, ADDRESS & GOOGLE MAPS PICKER/PREVIEW) */}
             <Modal
                 isOpen={gedungModalOpen}
                 onClose={() => setGedungModalOpen(false)}
@@ -967,6 +1442,45 @@ export default function KamarGedung() {
                 maxWidth="max-w-2xl"
             >
                 <form onSubmit={handleSubmitGedung} className="space-y-4">
+                    {/* Foto Gedung */}
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">
+                            Foto Gedung Kost (Tampak Depan) {!editingGedung && <span className="text-rose-500">* (Wajib)</span>}
+                        </label>
+                        <input
+                            type="file"
+                            accept="image/*"
+                            required={!editingGedung && !gedungFotoPreview}
+                            onChange={(e) => {
+                                const file = e.target.files[0];
+                                if (file) {
+                                    setGedungFotoFile(file);
+                                    setGedungFotoPreview(URL.createObjectURL(file));
+                                }
+                            }}
+                            className="w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-[#1E5FC9] hover:file:bg-blue-100 cursor-pointer"
+                        />
+                        {gedungFotoPreview && (
+                            <div className="mt-2 relative w-44 h-28 rounded-xl overflow-hidden border border-slate-200">
+                                <img src={gedungFotoPreview} alt="preview gedung" className="w-full h-full object-cover" />
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setGedungFotoFile(null);
+                                        setGedungFotoPreview(null);
+                                    }}
+                                    className="absolute top-1 right-1 bg-black/60 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] cursor-pointer"
+                                    title="Hapus foto"
+                                >
+                                    ✕
+                                </button>
+                            </div>
+                        )}
+                        <p className="text-[11px] text-slate-400 mt-1">
+                            Foto ini akan ditampilkan di kartu Gedung Kost pada halaman depan (Landing Page).
+                        </p>
+                    </div>
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                             <label className="block text-xs font-semibold text-slate-700 mb-1">Nama Gedung</label>
@@ -1014,119 +1528,172 @@ export default function KamarGedung() {
                     {/* Pencarian & Pilih Titik Google Maps */}
                     <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
                         <div className="flex flex-wrap items-center justify-between gap-2">
-                            <span className="text-xs font-bold text-[#263b53] uppercase tracking-wider">
-                                📍 Pilih Titik Lokasi di Maps (Klik Langsung Pada Peta)
+                            <span className="text-xs font-bold text-[#263b53] uppercase tracking-wider flex items-center gap-1.5">
+                                <span>📍</span>
+                                <span>Titik Lokasi & Koordinat Google Maps</span>
                             </span>
                             <div className="flex items-center gap-2">
                                 <button
                                     type="button"
                                     onClick={handleUseCurrentGPS}
                                     className="px-2.5 py-1 text-xs font-semibold text-[#263b53] bg-white hover:bg-slate-100 border border-slate-300 rounded-lg transition cursor-pointer"
+                                    title="Gunakan posisi GPS perangkat saat ini"
                                 >
-                                    🎯 Gunakan Lokasi Saya (GPS)
+                                    🎯 Gunakan GPS Saya
                                 </button>
                                 <a
-                                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                                        gedungForm.alamat || `${gedungForm.latitude},${gedungForm.longitude}`
-                                    )}`}
+                                    href={`https://www.google.com/maps?q=${gedungForm.latitude},${gedungForm.longitude}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="px-2.5 py-1 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition"
+                                    className="px-2.5 py-1 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition flex items-center gap-1"
                                 >
-                                    Buka Google Maps ↗
+                                    <span>Buka Google Maps ↗</span>
                                 </a>
                             </div>
                         </div>
 
-                        {/* Search box to find place on map */}
-                        <div className="flex gap-2">
-                            <input
-                                type="text"
-                                placeholder="Ketik nama daerah / kampus / jalan (misal: Unjani Cimahi)..."
-                                value={mapSearchQuery}
-                                onChange={(e) => setMapSearchQuery(e.target.value)}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                        e.preventDefault();
-                                        handleSearchLocationOnMap();
-                                    }
-                                }}
-                                className="flex-1 px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white"
-                            />
-                            <button
-                                type="button"
-                                onClick={handleSearchLocationOnMap}
-                                disabled={searchingMap}
-                                className="px-3.5 py-2 text-xs font-semibold text-white bg-[#263b53] hover:bg-[#1b2c3f] rounded-xl transition shrink-0 cursor-pointer"
-                            >
-                                {searchingMap ? 'Mencari...' : 'Cari di Peta'}
-                            </button>
+                        {/* Petunjuk Pengambilan Titik Google Maps */}
+                        <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl text-xs text-blue-900 leading-relaxed">
+                            <p className="font-bold flex items-center gap-1 mb-1">
+                                <span>💡</span>
+                                <span>Cara Mudah Mengambil Titik dari Google Maps:</span>
+                            </p>
+                            <ol className="list-decimal list-inside space-y-0.5 text-[11px] text-blue-800">
+                                <li>
+                                    Buka <a href="https://www.google.com/maps" target="_blank" rel="noopener noreferrer" className="font-bold underline text-blue-700">Google Maps ↗</a> di tab baru dan cari area kost Anda.
+                                </li>
+                                <li>
+                                    <strong>Klik kanan</strong> tepat di atap gedung kost &rarr; <strong>klik angka koordinat</strong> di baris teratas (contoh: <code className="bg-white/80 px-1 py-0.2 rounded font-mono">-6.8869, 107.5356</code>).
+                                </li>
+                                <li>
+                                    <strong>Tempel (Paste)</strong> koordinat atau link Google Maps di kotak di bawah ini, atau langsung ke kolom Latitude/Longitude.
+                                </li>
+                            </ol>
                         </div>
 
-                        {/* Paste Google Maps Link or Lat,Lng */}
+                        {/* Search / Paste URL or Coords Box */}
+                        <div>
+                            <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                                Tempel Link Google Maps, Koordinat, atau Cari Patokan Jalan:
+                            </label>
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    placeholder="Tempel link https://maps.app.goo.gl/... ATAU koordinat -6.8869, 107.5356 ATAU nama jalan..."
+                                    value={mapSearchQuery}
+                                    onChange={(e) => setMapSearchQuery(e.target.value)}
+                                    onPaste={(e) => {
+                                        const pasted = e.clipboardData.getData('text');
+                                        if (pasted) {
+                                            setMapSearchQuery(pasted);
+                                            setTimeout(() => handleResolveLocation(pasted), 50);
+                                        }
+                                    }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            handleResolveLocation();
+                                        }
+                                    }}
+                                    className="flex-1 px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => handleResolveLocation()}
+                                    disabled={searchingMap}
+                                    className="px-3.5 py-2 text-xs font-semibold text-white bg-[#263b53] hover:bg-[#1b2c3f] rounded-xl transition shrink-0 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                                >
+                                    {searchingMap ? (
+                                        <>
+                                            <span className="animate-spin inline-block">⏳</span>
+                                            <span>Mendeteksi...</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <span>🔍</span>
+                                            <span>Terapkan Titik</span>
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Direct Coordinate inputs (with smart onPaste) */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <div className="flex items-center justify-between mb-1">
+                                    <label className="block text-[11px] font-semibold text-slate-600">Latitude</label>
+                                    <span className="text-[10px] text-slate-400">Bisa paste &quot;lat, lng&quot;</span>
+                                </div>
+                                <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    value={gedungForm.latitude}
+                                    onPaste={handleCoordinatePaste}
+                                    onChange={(e) =>
+                                        setGedungForm({
+                                            ...gedungForm,
+                                            latitude: e.target.value === '' ? '' : (parseFloat(e.target.value) || 0),
+                                        })
+                                    }
+                                    className="w-full px-3 py-1.5 text-xs font-mono border border-slate-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+                                    placeholder="-6.8869"
+                                />
+                            </div>
+                            <div>
+                                <div className="flex items-center justify-between mb-1">
+                                    <label className="block text-[11px] font-semibold text-slate-600">Longitude</label>
+                                    <span className="text-[10px] text-slate-400">Bisa paste &quot;lat, lng&quot;</span>
+                                </div>
+                                <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    value={gedungForm.longitude}
+                                    onPaste={handleCoordinatePaste}
+                                    onChange={(e) =>
+                                        setGedungForm({
+                                            ...gedungForm,
+                                            longitude: e.target.value === '' ? '' : (parseFloat(e.target.value) || 0),
+                                        })
+                                    }
+                                    className="w-full px-3 py-1.5 text-xs font-mono border border-slate-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+                                    placeholder="107.5356"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Link Google Maps custom / preview */}
                         <div>
                             <label className="block text-[11px] font-medium text-slate-600 mb-1">
-                                Link Google Maps atau Koordinat (otomatis mendeteksi titik peta saat ditempel):
+                                Link Google Maps Gedung (otomatis tersinkronisasi):
                             </label>
                             <input
                                 type="text"
-                                placeholder="Tempel link Google Maps (https://www.google.com/maps/@-6.88,107.53...) atau -6.8869, 107.5356"
+                                placeholder="https://www.google.com/maps?q=-6.8869,107.5356"
                                 value={gedungForm.link_gmaps}
                                 onChange={(e) => handleGmapsLinkChange(e.target.value)}
-                                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white"
+                                className="w-full px-3 py-1.5 text-xs font-mono text-slate-600 border border-slate-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
                             />
                         </div>
 
-                        {/* Coordinate inputs */}
-                        <div className="grid grid-cols-2 gap-3">
-                            <div>
-                                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Latitude</label>
-                                <input
-                                    type="number"
-                                    step="any"
-                                    value={gedungForm.latitude}
-                                    onChange={(e) =>
-                                        setGedungForm({
-                                            ...gedungForm,
-                                            latitude: parseFloat(e.target.value) || 0,
-                                        })
-                                    }
-                                    className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-xl bg-white"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Longitude</label>
-                                <input
-                                    type="number"
-                                    step="any"
-                                    value={gedungForm.longitude}
-                                    onChange={(e) =>
-                                        setGedungForm({
-                                            ...gedungForm,
-                                            longitude: parseFloat(e.target.value) || 0,
-                                        })
-                                    }
-                                    className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-xl bg-white"
-                                />
-                            </div>
-                        </div>
-
                         {/* Interactive Leaflet Map (Pilih Titik di Maps) */}
-                        <LeafletMapPicker
-                            latitude={gedungForm.latitude}
-                            longitude={gedungForm.longitude}
-                            interactive={true}
-                            height="260px"
-                            onChange={({ lat, lng, address }) => {
-                                setGedungForm((prev) => ({
-                                    ...prev,
-                                    latitude: lat,
-                                    longitude: lng,
-                                    alamat: address ? address : prev.alamat,
-                                    link_gmaps: `https://www.google.com/maps?q=${lat},${lng}`,
-                                }));
-                            }}
-                        />
+                        <div className="rounded-xl overflow-hidden border border-slate-200">
+                            <LeafletMapPicker
+                                latitude={gedungForm.latitude}
+                                longitude={gedungForm.longitude}
+                                interactive={true}
+                                height="260px"
+                                onChange={({ lat, lng, address }) => {
+                                    setGedungForm((prev) => ({
+                                        ...prev,
+                                        latitude: lat,
+                                        longitude: lng,
+                                        alamat: address ? address : prev.alamat,
+                                        link_gmaps: `https://www.google.com/maps?q=${lat},${lng}`,
+                                    }));
+                                }}
+                            />
+                        </div>
                     </div>
 
                     <div className="flex justify-end gap-2 pt-2">
@@ -1153,10 +1720,10 @@ export default function KamarGedung() {
                 isOpen={Boolean(deleteKamarTarget)}
                 onClose={() => setDeleteKamarTarget(null)}
                 onConfirm={handleConfirmDeleteKamar}
-                title="Hapus Kamar"
-                message={`Apakah Anda yakin ingin menghapus Kamar ${deleteKamarTarget?.nomor_kamar}?`}
-                confirmText="Ya, Hapus Kamar"
-                variant="danger"
+                title={`Hapus Kamar ${deleteKamarTarget?.nomor_kamar}`}
+                message={`Apakah Anda yakin ingin menghapus Kamar ${deleteKamarTarget?.nomor_kamar}? Kamar ini akan dipindahkan ke menu "Baru Saja Dihapus". Gedung kost tidak akan terpengaruh.`}
+                confirmText="Ya, Hapus Kamar Ini"
+                isDanger={true}
                 loading={deletingKamar}
             />
 
@@ -1165,10 +1732,10 @@ export default function KamarGedung() {
                 isOpen={Boolean(deleteGedungTarget)}
                 onClose={() => setDeleteGedungTarget(null)}
                 onConfirm={handleConfirmDeleteGedung}
-                title="Hapus Gedung"
-                message={`Apakah Anda yakin ingin menghapus ${deleteGedungTarget?.nama_gedung}? Pastikan seluruh kamar di dalam gedung ini sudah kosong/dihapus terlebih dahulu.`}
-                confirmText="Ya, Hapus Gedung"
-                variant="danger"
+                title={`Hapus Gedung: ${deleteGedungTarget?.nama_gedung}`}
+                message={`PERINGATAN: Anda akan menghapus GEDUNG "${deleteGedungTarget?.nama_gedung}". Tindakan ini BUKAN untuk menghapus kamar, melainkan menghapus seluruh bangunan gedung kost. Pastikan seluruh kamar di dalam gedung ini sudah kosong/dihapus terlebih dahulu.`}
+                confirmText="Ya, Hapus Gedung Ini"
+                isDanger={true}
                 loading={deletingGedung}
             />
         </AdminLayout>

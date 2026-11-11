@@ -77,10 +77,13 @@ export function exportToPdf({
         <button onclick="window.print()" style="padding: 8px 16px; background: #1E5FC9; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;">Cetak / Simpan PDF</button>
     </div>
     <div class="header-wrap">
-        <div>
-            <strong style="font-size: 20px; color: #1E5FC9;">Home-In</strong>
-            <div style="font-size: 11px; color: #64748B;">${title}</div>
-            ${subtitle ? `<div style="font-size: 10px; color: #64748B;">${subtitle}</div>` : ''}
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <img src="/Group 2.svg" alt="Home-In" style="height: 32px; width: 32px; object-fit: contain;" />
+            <div>
+                <strong style="font-size: 20px; color: #263b53;">Home<span style="color: #3b82f6;">-in</span></strong>
+                <div style="font-size: 11px; color: #64748B;">${title}</div>
+                ${subtitle ? `<div style="font-size: 10px; color: #64748B;">${subtitle}</div>` : ''}
+            </div>
         </div>
         <div style="text-align: right; font-size: 10px; color: #64748B;">
             <div>Cabang: ${branchName}</div>

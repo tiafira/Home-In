@@ -20,6 +20,12 @@ class Cabang extends Model
         'jam_operasional_mulai',
         'jam_operasional_selesai',
         'jam_malam',
+        'nama_bank',
+        'no_rekening',
+        'nama_pemilik_rekening',
+        'qr_pembayaran',
+        'no_wa',
+        'email_cabang',
     ];
 
     public function gedung(): HasMany

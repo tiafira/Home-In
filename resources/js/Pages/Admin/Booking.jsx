@@ -16,6 +16,7 @@ export default function Booking() {
     const [bookings, setBookings] = useState([]);
     const [counts, setCounts] = useState({
         request_baru: 0,
+        menunggu_pembayaran: 0,
         ditawarkan_alternatif: 0,
         dikonfirmasi: 0,
         ditolak: 0,
@@ -27,6 +28,27 @@ export default function Booking() {
     // Selected booking for detail
     const [selectedBooking, setSelectedBooking] = useState(null);
     const [detailModalOpen, setDetailModalOpen] = useState(false);
+
+    // Image Preview Modal state
+    const [previewImageModalUrl, setPreviewImageModalUrl] = useState(null);
+
+    const resolveStorageUrl = (url) => {
+        if (!url) return '';
+        if (url.startsWith('http://') || url.startsWith('https://')) return url;
+        if (url.startsWith('/storage/')) return url;
+        if (url.startsWith('storage/')) return `/${url}`;
+        if (url.startsWith('/')) return url;
+        return `/storage/${url}`;
+    };
+
+    // Verify Payment Modal state
+    const [verifyModalOpen, setVerifyModalOpen] = useState(false);
+    const [submittingVerify, setSubmittingVerify] = useState(false);
+
+    // Reject Payment Proof Modal state
+    const [rejectProofModalOpen, setRejectProofModalOpen] = useState(false);
+    const [rejectProofReason, setRejectProofReason] = useState('');
+    const [submittingRejectProof, setSubmittingRejectProof] = useState(false);
 
     // Reject Modal state
     const [rejectModalOpen, setRejectModalOpen] = useState(false);
@@ -44,6 +66,12 @@ export default function Booking() {
     const [altData, setAltData] = useState({ current_cabang: null, alternatives: [] });
     const [selectedAltRoom, setSelectedAltRoom] = useState('');
     const [submittingAlt, setSubmittingAlt] = useState(false);
+
+    // Check-in Awal Modal state
+    const [checkinAwalModalOpen, setCheckinAwalModalOpen] = useState(false);
+    const [checkinTarget, setCheckinTarget] = useState(null);
+    const [checkinTanggal, setCheckinTanggal] = useState(new Date().toISOString().split('T')[0]);
+    const [submittingCheckinAwal, setSubmittingCheckinAwal] = useState(false);
 
     const fetchBookings = useCallback(async () => {
         setLoading(true);
@@ -172,8 +200,82 @@ export default function Booking() {
         }
     };
 
+    // Handle Open Verify Modal
+    const handleOpenVerifyModal = (booking) => {
+        setSelectedBooking(booking);
+        setVerifyModalOpen(true);
+    };
+
+    // Handle Verify Payment (Tandai Lunas)
+    const handleVerifyPayment = async (bookingId) => {
+        setSubmittingVerify(true);
+        try {
+            const res = await api.post(`/admin/booking/${bookingId}/verifikasi-pembayaran`);
+            toast.success(res.data.message || 'Pembayaran berhasil diverifikasi dan ditandai Lunas!');
+            setVerifyModalOpen(false);
+            setDetailModalOpen(false);
+            fetchBookings();
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Gagal memverifikasi pembayaran.');
+        } finally {
+            setSubmittingVerify(false);
+        }
+    };
+
+    // Handle Reject Proof
+    const handleRejectProof = async (e) => {
+        e.preventDefault();
+        if (!selectedBooking) return;
+        if (!rejectProofReason.trim()) {
+            toast.warning('Alasan penolakan bukti transfer wajib diisi.');
+            return;
+        }
+        setSubmittingRejectProof(true);
+        try {
+            const res = await api.post(`/admin/booking/${selectedBooking.id}/tolak-bukti`, {
+                alasan: rejectProofReason.trim(),
+            });
+            toast.success(res.data.message || 'Bukti transfer ditolak.');
+            setRejectProofModalOpen(false);
+            setVerifyModalOpen(false);
+            setDetailModalOpen(false);
+            setRejectProofReason('');
+            fetchBookings();
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Gagal menolak bukti transfer.');
+        } finally {
+            setSubmittingRejectProof(false);
+        }
+    };
+
+    // Handle Check-in Awal
+    const handleOpenCheckinAwalModal = (booking) => {
+        setCheckinTarget(booking);
+        setCheckinTanggal(new Date().toISOString().split('T')[0]);
+        setCheckinAwalModalOpen(true);
+    };
+
+    const handleConfirmCheckinAwal = async () => {
+        if (!checkinTarget || !checkinTanggal) return;
+        setSubmittingCheckinAwal(true);
+        try {
+            const res = await api.post(`/admin/booking/${checkinTarget.id}/checkin-awal`, {
+                tanggal_checkin: checkinTanggal,
+            });
+            toast.success(res.data.message || 'Check-in berhasil diproses! Penghuni kini berstatus aktif.');
+            setCheckinAwalModalOpen(false);
+            if (detailModalOpen) setDetailModalOpen(false);
+            fetchBookings();
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Gagal memproses check-in penghuni.');
+        } finally {
+            setSubmittingCheckinAwal(false);
+        }
+    };
+
     const tabs = [
         { key: 'request_baru', label: 'Request Baru', count: counts.request_baru, color: 'bg-amber-500' },
+        { key: 'menunggu_pembayaran', label: 'Menunggu Pembayaran / Bukti', count: counts.menunggu_pembayaran, color: 'bg-blue-500' },
         { key: 'ditawarkan_alternatif', label: 'Ditawarkan Alternatif', count: counts.ditawarkan_alternatif, color: 'bg-purple-500' },
         { key: 'dikonfirmasi', label: 'Dikonfirmasi', count: counts.dikonfirmasi, color: 'bg-emerald-500' },
         { key: 'ditolak', label: 'Ditolak', count: counts.ditolak, color: 'bg-rose-500' },
@@ -250,11 +352,49 @@ export default function Booking() {
             className: 'text-right whitespace-nowrap',
             render: (row) => (
                 <div className="flex items-center justify-end gap-2">
+                    {['menunggu_konfirmasi', 'menunggu_persetujuan'].includes(row.status) && (
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setSelectedBooking(row);
+                                setAcceptDialogOpen(true);
+                            }}
+                            className="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-colors"
+                        >
+                            Setujui
+                        </button>
+                    )}
+                    {row.status === 'menunggu_verifikasi' && (
+                        <button
+                            type="button"
+                            onClick={() => handleOpenVerifyModal(row)}
+                            className="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm transition-colors flex items-center gap-1 cursor-pointer"
+                            title="Tinjau & Verifikasi Bukti Pembayaran"
+                        >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            Verifikasi Bukti
+                        </button>
+                    )}
+                    {['terjadwal', 'dikonfirmasi', 'disetujui'].includes(row.status) && (
+                        <button
+                            type="button"
+                            onClick={() => handleOpenCheckinAwalModal(row)}
+                            className="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm transition-colors flex items-center gap-1 cursor-pointer"
+                            title="Check-In Sekarang / Lebih Awal"
+                        >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                            </svg>
+                            Check-In Awal
+                        </button>
+                    )}
                     <button
                         onClick={() => handleOpenDetail(row)}
-                        className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-50 text-[#263b53] hover:bg-blue-100 transition-colors"
+                        className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-[#EAF1FC] text-[#1E5FC9] hover:bg-blue-100 transition-colors flex items-center gap-1"
                     >
-                        Tinjau Request
+                        Detail
                     </button>
                 </div>
             ),
@@ -325,14 +465,14 @@ export default function Booking() {
                             </button>
 
                             <div className="flex items-center gap-2">
-                                {['menunggu_persetujuan', 'menunggu_pembayaran'].includes(selectedBooking.status) && (
+                                {['menunggu_konfirmasi', 'menunggu_persetujuan'].includes(selectedBooking.status) && (
                                     <>
                                         <button
                                             type="button"
                                             onClick={handleOpenAlternatives}
                                             className="px-4 py-2 text-sm font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-xl transition"
                                         >
-                                            Tawarkan Alternatif (Kost Penuh)
+                                            Tawarkan Alternatif
                                         </button>
                                         <button
                                             type="button"
@@ -348,9 +488,9 @@ export default function Booking() {
                                         <button
                                             type="button"
                                             onClick={() => setAcceptDialogOpen(true)}
-                                            className="px-4 py-2 text-sm font-semibold text-white bg-[#263b53] hover:bg-[#1b2c3f] rounded-xl shadow-sm transition"
+                                            className="px-4 py-2 text-sm font-semibold text-white bg-[#1E5FC9] hover:bg-[#184ea8] rounded-xl shadow-sm transition"
                                         >
-                                            Terima & Konfirmasi
+                                            Setujui Permohonan
                                         </button>
                                     </>
                                 )}
@@ -365,6 +505,45 @@ export default function Booking() {
                                             Calon Penghuni Menerima Tawaran
                                         </button>
                                     </>
+                                )}
+
+                                {selectedBooking.status === 'menunggu_verifikasi' && (
+                                    <>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setRejectProofReason('');
+                                                setRejectProofModalOpen(true);
+                                            }}
+                                            className="px-4 py-2 text-sm font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl transition"
+                                        >
+                                            Tolak Bukti
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleVerifyPayment(selectedBooking.id)}
+                                            disabled={submittingVerify}
+                                            className="px-4 py-2 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-sm transition flex items-center gap-1.5"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                                            </svg>
+                                            {submittingVerify ? 'Memproses...' : 'Verifikasi & Tandai Lunas'}
+                                        </button>
+                                    </>
+                                )}
+
+                                {['terjadwal', 'dikonfirmasi', 'disetujui'].includes(selectedBooking.status) && (
+                                    <button
+                                        type="button"
+                                        onClick={() => handleOpenCheckinAwalModal(selectedBooking)}
+                                        className="px-4 py-2 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                                        </svg>
+                                        Check-In Sekarang / Lebih Awal
+                                    </button>
                                 )}
                             </div>
                         </div>
@@ -436,6 +615,162 @@ export default function Booking() {
                                 </div>
                             </div>
                         </div>
+
+                        {/* Rincian Fasilitas & Tagihan */}
+                        {selectedBooking.rincian_biaya && (
+                            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
+                                <div className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                                    Rincian Tagihan & Fasilitas
+                                </div>
+                                <div className="text-xs space-y-2">
+                                    <div className="flex justify-between items-center text-slate-600">
+                                        <span>Harga Dasar Kamar {selectedBooking.kamar?.nomor_kamar}:</span>
+                                        <span className="font-semibold text-slate-800">
+                                            Rp {Number(selectedBooking.rincian_biaya.harga_kamar || 0).toLocaleString('id-ID')}/bln
+                                        </span>
+                                    </div>
+
+                                    {/* Fasilitas Per Bulan */}
+                                    {selectedBooking.rincian_biaya.fasilitas_per_bulan?.map((f) => (
+                                        <div key={f.id} className="flex justify-between items-center text-slate-600">
+                                            <span className="flex items-center gap-1.5">
+                                                <span>{f.nama}</span>
+                                                <span className="px-1.5 py-0.5 rounded text-[10px] bg-blue-50 text-blue-700 font-semibold border border-blue-200">
+                                                    Per Bulan
+                                                </span>
+                                            </span>
+                                            <span className="font-semibold text-slate-800">
+                                                +Rp {Number(f.biaya).toLocaleString('id-ID')}/bln
+                                            </span>
+                                        </div>
+                                    ))}
+
+                                    {/* Fasilitas Sekali Bayar */}
+                                    {selectedBooking.rincian_biaya.fasilitas_sekali_bayar?.map((f) => (
+                                        <div key={f.id} className="flex justify-between items-center text-emerald-800">
+                                            <span className="flex items-center gap-1.5">
+                                                <span>{f.nama}</span>
+                                                <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-50 text-emerald-700 font-bold border border-emerald-200">
+                                                    Sekali Bayar • Hak Milik
+                                                </span>
+                                            </span>
+                                            <span className="font-bold text-emerald-700">
+                                                +Rp {Number(f.biaya).toLocaleString('id-ID')} (1x)
+                                            </span>
+                                        </div>
+                                    ))}
+
+                                    <div className="pt-2 border-t border-slate-200 flex justify-between items-center font-bold text-sm">
+                                        <span className="text-slate-800">Total Tagihan Bulan Pertama:</span>
+                                        <span className="text-[#1E5FC9]">
+                                            Rp {Number(selectedBooking.rincian_biaya.total_bulan_pertama || 0).toLocaleString('id-ID')}
+                                        </span>
+                                    </div>
+                                    {selectedBooking.rincian_biaya.subtotal_fasilitas_sekali_bayar > 0 && (
+                                        <div className="text-[11px] text-slate-500 text-right">
+                                            Tagihan Bulan ke-2 dst: <strong>Rp {Number(selectedBooking.rincian_biaya.total_bulan_berikutnya || 0).toLocaleString('id-ID')}/bln</strong>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Informasi Bukti Pembayaran */}
+                        {(() => {
+                            const payment = Array.isArray(selectedBooking.pembayaran_booking)
+                                ? selectedBooking.pembayaran_booking[0]
+                                : selectedBooking.pembayaran_booking;
+                            const buktiUrl = payment?.bukti_bayar || payment?.bukti_pembayaran;
+
+                            if (!payment && !buktiUrl) return null;
+
+                            return (
+                                <div className="p-4 bg-amber-50/70 border border-amber-200 rounded-xl space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <div className="text-xs font-bold text-amber-800 uppercase tracking-wider flex items-center gap-1.5">
+                                            <span>💳 Informasi Pembayaran & Bukti Transfer</span>
+                                        </div>
+                                        <StatusBadge status={payment?.status || selectedBooking.status} />
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                                        <div className="space-y-1.5 text-slate-700">
+                                            <div>
+                                                <span className="text-slate-500">Nominal Tagihan:</span>{' '}
+                                                <strong>Rp {Number(payment?.nominal || 0).toLocaleString('id-ID')}</strong>
+                                            </div>
+                                            {payment?.kode_unik > 0 && (
+                                                <div>
+                                                    <span className="text-slate-500">Kode Unik:</span>{' '}
+                                                    <strong className="text-blue-600">+{payment.kode_unik}</strong>
+                                                </div>
+                                            )}
+                                            <div>
+                                                <span className="text-slate-500">Metode:</span>{' '}
+                                                <strong>{payment?.metode || payment?.metode_pembayaran || 'Transfer'}</strong>
+                                            </div>
+                                            {payment?.tanggal_bayar && (
+                                                <div>
+                                                    <span className="text-slate-500">Waktu Transfer:</span>{' '}
+                                                    <strong>{new Date(payment.tanggal_bayar).toLocaleString('id-ID')}</strong>
+                                                </div>
+                                            )}
+                                            {payment?.kwitansi_nomor && (
+                                                <div>
+                                                    <span className="text-slate-500">No. Kwitansi:</span>{' '}
+                                                    <strong className="text-emerald-700">{payment.kwitansi_nomor}</strong>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {buktiUrl ? (
+                                            <div>
+                                                <span className="text-[11px] text-slate-500 block mb-1 font-medium">Foto Bukti Transfer:</span>
+                                                <div className="flex flex-col gap-1.5 items-start">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setPreviewImageModalUrl(resolveStorageUrl(buktiUrl))}
+                                                        className="inline-block border border-amber-300 rounded-lg overflow-hidden hover:opacity-90 shadow-sm transition group relative cursor-pointer"
+                                                        title="Klik untuk membuka foto ukuran penuh"
+                                                    >
+                                                        <img
+                                                            src={resolveStorageUrl(buktiUrl)}
+                                                            alt="Bukti Transfer"
+                                                            className="w-36 h-28 object-cover group-hover:scale-105 transition duration-150"
+                                                        />
+                                                        <div className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[11px] font-bold transition">
+                                                            Perbesar 🔍
+                                                        </div>
+                                                    </button>
+                                                    <div className="flex items-center gap-2 text-[11px]">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setPreviewImageModalUrl(resolveStorageUrl(buktiUrl))}
+                                                            className="text-[#1E5FC9] font-bold hover:underline"
+                                                        >
+                                                            Lihat Foto
+                                                        </button>
+                                                        <span className="text-slate-300">•</span>
+                                                        <a
+                                                            href={resolveStorageUrl(buktiUrl)}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="text-slate-500 hover:text-slate-700"
+                                                        >
+                                                            Tab Baru ↗
+                                                        </a>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="text-xs text-slate-400 italic flex items-center">
+                                                Belum ada foto bukti transfer yang diunggah.
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })()}
 
                         {/* Alternative room offer if present */}
                         {selectedBooking.kamar_alternatif && (
@@ -659,6 +994,291 @@ export default function Booking() {
                     )}
                 </div>
             </Modal>
+
+            {/* VERIFY PAYMENT PROOF MODAL */}
+            {selectedBooking && (
+                <Modal
+                    isOpen={verifyModalOpen}
+                    onClose={() => setVerifyModalOpen(false)}
+                    title={`Verifikasi Bukti Pembayaran Booking #${selectedBooking.id}`}
+                    maxWidth="max-w-xl"
+                    footer={
+                        <div className="flex items-center justify-between w-full">
+                            <button
+                                type="button"
+                                onClick={() => setVerifyModalOpen(false)}
+                                className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl"
+                            >
+                                Tutup
+                            </button>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setRejectProofReason('');
+                                        setRejectProofModalOpen(true);
+                                    }}
+                                    className="px-4 py-2 text-sm font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl transition"
+                                >
+                                    Tolak Bukti
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleVerifyPayment(selectedBooking.id)}
+                                    disabled={submittingVerify}
+                                    className="px-4 py-2 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-sm transition flex items-center gap-1.5"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    {submittingVerify ? 'Memproses...' : 'Verifikasi & Tandai Lunas'}
+                                </button>
+                            </div>
+                        </div>
+                    }
+                >
+                    {(() => {
+                        const payment = Array.isArray(selectedBooking.pembayaran_booking)
+                            ? selectedBooking.pembayaran_booking[0]
+                            : selectedBooking.pembayaran_booking;
+                        const buktiUrl = payment?.bukti_bayar || payment?.bukti_pembayaran;
+
+                        return (
+                            <div className="space-y-4">
+                                <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-2">
+                                    <div className="flex justify-between">
+                                        <span className="text-slate-500">Calon Penghuni:</span>
+                                        <strong className="text-slate-800">{selectedBooking.user?.name || selectedBooking.user?.nama}</strong>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-slate-500">Kamar:</span>
+                                        <strong className="text-slate-800">
+                                            Kamar {selectedBooking.kamar?.nomor_kamar} ({selectedBooking.kamar?.gedung?.cabang?.nama_cabang})
+                                        </strong>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-slate-500">Nominal Tagihan:</span>
+                                        <strong className="text-[#1E5FC9]">
+                                            Rp {Number((payment?.nominal || selectedBooking.rincian_biaya?.total_bulan_pertama || 0) + (payment?.kode_unik || 0)).toLocaleString('id-ID')}
+                                        </strong>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-slate-500">Metode Pembayaran:</span>
+                                        <strong className="capitalize">{payment?.metode || payment?.metode_pembayaran || 'Transfer QRIS'}</strong>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <span className="text-xs font-bold text-slate-700 block mb-2">
+                                        Foto Bukti Transfer yang Diunggah:
+                                    </span>
+                                    {buktiUrl ? (
+                                        <div className="text-center space-y-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => setPreviewImageModalUrl(resolveStorageUrl(buktiUrl))}
+                                                className="inline-block border-2 border-slate-200 rounded-2xl overflow-hidden hover:border-[#1E5FC9] transition shadow-md group relative cursor-pointer"
+                                                title="Klik untuk membuka ukuran penuh"
+                                            >
+                                                <img
+                                                    src={resolveStorageUrl(buktiUrl)}
+                                                    alt="Bukti Transfer"
+                                                    className="max-h-80 w-auto object-contain mx-auto group-hover:scale-102 transition duration-150"
+                                                />
+                                                <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-bold transition">
+                                                    Klik untuk Memperbesar 🔍
+                                                </div>
+                                            </button>
+                                            <div className="flex items-center justify-center gap-3 text-xs">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setPreviewImageModalUrl(resolveStorageUrl(buktiUrl))}
+                                                    className="px-3 py-1.5 rounded-lg bg-blue-50 text-[#1E5FC9] font-bold hover:bg-blue-100 transition"
+                                                >
+                                                    🔍 Perbesar Foto
+                                                </button>
+                                                <a
+                                                    href={resolveStorageUrl(buktiUrl)}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 font-semibold hover:bg-slate-200 transition"
+                                                >
+                                                    Buka di Tab Baru ↗
+                                                </a>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="p-8 text-center text-slate-400 border border-dashed border-slate-300 rounded-2xl text-xs">
+                                            Tidak ada foto bukti transfer yang diunggah.
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })()}
+                </Modal>
+            )}
+
+            {/* REJECT PROOF MODAL */}
+            <Modal
+                isOpen={rejectProofModalOpen}
+                onClose={() => setRejectProofModalOpen(false)}
+                title="Tolak Bukti Transfer Pembayaran"
+                maxWidth="max-w-md"
+                footer={
+                    <div className="flex items-center justify-between w-full">
+                        <button
+                            type="button"
+                            onClick={() => setRejectProofModalOpen(false)}
+                            className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl"
+                        >
+                            Batal
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleRejectProof}
+                            disabled={submittingRejectProof || !rejectProofReason.trim()}
+                            className="px-4 py-2 text-sm font-semibold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50 rounded-xl shadow-sm transition"
+                        >
+                            {submittingRejectProof ? 'Memproses...' : 'Tolak Bukti & Minta Upload Ulang'}
+                        </button>
+                    </div>
+                }
+            >
+                <div className="space-y-3">
+                    <p className="text-xs text-slate-600">
+                        Harap berikan alasan penolakan bukti transfer ini. Calon penghuni akan menerima notifikasi dan diminta mengunggah ulang bukti transfer yang valid.
+                    </p>
+                    <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                            Alasan Penolakan Bukti *
+                        </label>
+                        <textarea
+                            rows={3}
+                            value={rejectProofReason}
+                            onChange={(e) => setRejectProofReason(e.target.value)}
+                            placeholder="Contoh: Nominal transfer kurang dari Rp 750.342 / Bukti transfer buram tidak terbaca..."
+                            className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500"
+                            required
+                        />
+                    </div>
+                </div>
+            </Modal>
+
+            {/* CHECK-IN AWAL MODAL */}
+            {checkinTarget && (
+                <Modal
+                    isOpen={checkinAwalModalOpen}
+                    onClose={() => setCheckinAwalModalOpen(false)}
+                    title={`Check-In Sekarang / Lebih Awal — ${checkinTarget.user?.name || checkinTarget.user?.nama || 'Calon Penghuni'}`}
+                    maxWidth="max-w-md"
+                    footer={
+                        <div className="flex items-center justify-end gap-2 w-full">
+                            <button
+                                type="button"
+                                onClick={() => setCheckinAwalModalOpen(false)}
+                                className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-xl"
+                            >
+                                Batal
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleConfirmCheckinAwal}
+                                disabled={submittingCheckinAwal || !checkinTanggal}
+                                className="px-4 py-2 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                                </svg>
+                                {submittingCheckinAwal ? 'Memproses...' : 'Konfirmasi Check-In Sekarang'}
+                            </button>
+                        </div>
+                    }
+                >
+                    <div className="space-y-4">
+                        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 leading-relaxed">
+                            💡 Calon penghuni dapat melakukan <strong>check-in lebih awal</strong> dari jadwal rencana semula. Kamar <strong>{checkinTarget.kamar?.nomor_kamar}</strong> ({checkinTarget.kamar?.gedung?.nama_gedung}) akan langsung diaktifkan sebagai <strong>Terisi</strong> dan akun penghuni menjadi <strong>Aktif</strong>.
+                        </div>
+
+                        <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-1.5">
+                            <div className="flex justify-between">
+                                <span className="text-slate-500">Unit Kamar:</span>
+                                <span className="font-semibold text-slate-800">Kamar {checkinTarget.kamar?.nomor_kamar} (Lt. {checkinTarget.kamar?.lantai})</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-slate-500">Gedung / Cabang:</span>
+                                <span className="font-semibold text-slate-800">{checkinTarget.kamar?.gedung?.nama_gedung} ({checkinTarget.kamar?.gedung?.cabang?.nama_cabang})</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-slate-500">Rencana Check-In Semula:</span>
+                                <span className="font-medium text-slate-700">
+                                    {checkinTarget.rencana_checkin ? new Date(checkinTarget.rencana_checkin).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-'}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">
+                                Tanggal Check-In Aktual / Hari Kedatangan *
+                            </label>
+                            <input
+                                type="date"
+                                required
+                                value={checkinTanggal}
+                                onChange={(e) => setCheckinTanggal(e.target.value)}
+                                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-200 focus:border-emerald-600"
+                            />
+                            <p className="text-[11px] text-slate-500 mt-1">
+                                💡 Anda bisa memilih tanggal hari ini atau tanggal lebih awal jika penghuni sudah mulai menempati kamar.
+                            </p>
+                        </div>
+                    </div>
+                </Modal>
+            )}
+
+            {/* IMAGE PREVIEW LIGHTBOX MODAL */}
+            {previewImageModalUrl && (
+                <div
+                    className="fixed inset-0 z-[10000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
+                    onClick={() => setPreviewImageModalUrl(null)}
+                >
+                    <div
+                        className="bg-white rounded-3xl max-w-3xl w-full p-4 sm:p-6 shadow-2xl relative animate-in zoom-in-95 duration-150"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100">
+                            <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                                <span>Bukti Transfer Pembayaran</span>
+                            </h4>
+                            <div className="flex items-center gap-2">
+                                <a
+                                    href={previewImageModalUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="px-3 py-1.5 rounded-lg bg-blue-50 text-[#1E5FC9] hover:bg-blue-100 text-xs font-semibold flex items-center gap-1"
+                                >
+                                    Buka di Tab Baru ↗
+                                </a>
+                                <button
+                                    type="button"
+                                    onClick={() => setPreviewImageModalUrl(null)}
+                                    className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-sm"
+                                >
+                                    ✕
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center justify-center bg-slate-900/5 rounded-2xl overflow-hidden p-2">
+                            <img
+                                src={previewImageModalUrl}
+                                alt="Bukti Transfer Penuh"
+                                className="max-h-[75vh] w-auto max-w-full object-contain rounded-xl shadow-sm"
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
         </AdminLayout>
     );
 }

@@ -20,6 +20,7 @@ class Notifikasi extends Model
         'isi',
         'pesan',
         'tipe',
+        'redirect_url',
         'referensi_tabel',
         'referensi_id',
         'sudah_dibaca',

@@ -3,12 +3,17 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\ActivityLog;
 use App\Models\Fasilitas;
+use App\Models\IzinKeluar;
 use App\Models\Kamar;
 use App\Models\KamarFasilitas;
+use App\Models\Notifikasi;
 use App\Models\Penghuni;
+use App\Models\Peringatan;
 use App\Models\User;
 use App\Services\BranchContext;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -103,7 +108,7 @@ class PenghuniController extends Controller
         $request->validate([
             'name' => 'required|string|max:100',
             'email' => 'required|email|max:100',
-            'no_hp' => 'required|string|max:20',
+            'no_hp' => 'nullable|string|max:20',
             'kamar_id' => 'required|exists:kamar,id',
             'no_ktp' => 'nullable|string|max:20',
             'alamat_asal' => 'nullable|string',
@@ -343,7 +348,7 @@ class PenghuniController extends Controller
      */
     public function checkout(Request $request, int $id): JsonResponse
     {
-        $penghuni = Penghuni::with('kamar')->findOrFail($id);
+        $penghuni = Penghuni::with('kamar.gedung')->findOrFail($id);
 
         $penghuni->status = 'nonaktif';
         $penghuni->tanggal_keluar = now()->toDateString();
@@ -354,10 +359,353 @@ class PenghuniController extends Controller
             $penghuni->kamar->save();
         }
 
+        ActivityLog::create([
+            'user_id' => auth()->id(),
+            'cabang_id' => $penghuni->kamar?->gedung?->cabang_id,
+            'aksi' => 'checkout_penghuni',
+            'model_type' => 'Penghuni',
+            'model_id' => $penghuni->id,
+            'keterangan' => "Penghuni {$penghuni->user?->nama} telah checkout dari kamar {$penghuni->kamar?->nomor_kamar}.",
+            'created_at' => now(),
+        ]);
+
         return response()->json([
             'status' => 'success',
             'message' => 'Penghuni telah berhasil di-checkout dan status kamar kembali kosong.',
             'data' => $penghuni,
         ]);
+    }
+
+    /**
+     * Extend tenant stay duration.
+     */
+    public function perpanjang(Request $request, int $id): JsonResponse
+    {
+        $request->validate([
+            'durasi_bulan' => 'required|integer|min:1|max:36',
+        ]);
+
+        $penghuni = Penghuni::with(['kamar.gedung', 'user'])->findOrFail($id);
+        $durasi = (int) $request->durasi_bulan;
+
+        $currentEnd = $penghuni->masa_tinggal_sampai
+            ? Carbon::parse($penghuni->masa_tinggal_sampai)
+            : Carbon::today();
+
+        // If already passed, extend from today
+        $baseDate = $currentEnd->isPast() ? Carbon::today() : $currentEnd;
+        $newEnd = (clone $baseDate)->addMonths($durasi);
+
+        $penghuni->masa_tinggal_sampai = $newEnd;
+        $penghuni->status = 'aktif';
+        $penghuni->save();
+
+        Notifikasi::create([
+            'user_id' => $penghuni->user_id,
+            'judul' => 'Masa Tinggal Diperpanjang',
+            'isi' => "Masa tinggal Anda di kamar {$penghuni->kamar?->nomor_kamar} telah diperpanjang sebanyak {$durasi} bulan hingga {$newEnd->format('d/m/Y')}.",
+            'tipe' => 'info',
+            'redirect_url' => '/mobile-app',
+            'referensi_tabel' => 'penghuni',
+            'referensi_id' => $penghuni->id,
+            'sudah_dibaca' => false,
+        ]);
+
+        ActivityLog::create([
+            'user_id' => auth()->id(),
+            'cabang_id' => $penghuni->kamar?->gedung?->cabang_id,
+            'aksi' => 'perpanjang_masa_tinggal',
+            'model_type' => 'Penghuni',
+            'model_id' => $penghuni->id,
+            'keterangan' => "Admin memperpanjang masa tinggal {$penghuni->user?->nama} sebanyak {$durasi} bulan hingga {$newEnd->toDateString()}.",
+            'created_at' => now(),
+        ]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => "Masa tinggal berhasil diperpanjang hingga {$newEnd->format('d/m/Y')}.",
+            'data' => $penghuni->load('kamar.gedung.cabang', 'user'),
+        ]);
+    }
+
+    /**
+     * Move tenant to another empty room.
+     */
+    public function pindahKamar(Request $request, int $id): JsonResponse
+    {
+        $request->validate([
+            'kamar_baru_id' => 'required|exists:kamar,id',
+        ]);
+
+        $penghuni = Penghuni::with(['kamar.gedung', 'user'])->findOrFail($id);
+        $kamarBaru = Kamar::with('gedung.cabang')->findOrFail($request->kamar_baru_id);
+
+        if ($kamarBaru->status !== 'kosong') {
+            return response()->json([
+                'status' => 'error',
+                'message' => "Kamar {$kamarBaru->nomor_kamar} tidak sedang kosong.",
+            ], 422);
+        }
+
+        return DB::transaction(function () use ($penghuni, $kamarBaru) {
+            $oldKamar = $penghuni->kamar;
+
+            // 1. Free old room
+            if ($oldKamar) {
+                $oldKamar->status = 'kosong';
+                $oldKamar->save();
+            }
+
+            // 2. Set new room as occupied
+            $kamarBaru->status = 'terisi';
+            $kamarBaru->save();
+
+            // 3. Move tenant
+            $penghuni->kamar_id = $kamarBaru->id;
+            $penghuni->save();
+
+            // 4. Migrate requested facilities from old room to new room
+            if ($oldKamar) {
+                KamarFasilitas::where('kamar_id', $oldKamar->id)
+                    ->whereIn('status_request', ['aktif', 'terpasang'])
+                    ->update(['kamar_id' => $kamarBaru->id]);
+            }
+
+            Notifikasi::create([
+                'user_id' => $penghuni->user_id,
+                'judul' => 'Pindah Kamar Berhasil',
+                'isi' => "Anda telah berhasil dipindahkan ke kamar {$kamarBaru->nomor_kamar} gedung {$kamarBaru->gedung?->nama_gedung}.",
+                'tipe' => 'info',
+                'redirect_url' => '/mobile-app',
+                'referensi_tabel' => 'penghuni',
+                'referensi_id' => $penghuni->id,
+                'sudah_dibaca' => false,
+            ]);
+
+            ActivityLog::create([
+                'user_id' => auth()->id(),
+                'cabang_id' => $kamarBaru->gedung?->cabang_id,
+                'aksi' => 'pindah_kamar',
+                'model_type' => 'Penghuni',
+                'model_id' => $penghuni->id,
+                'keterangan' => "Penghuni {$penghuni->user?->nama} pindah dari kamar {$oldKamar?->nomor_kamar} ke kamar {$kamarBaru->nomor_kamar}.",
+                'created_at' => now(),
+            ]);
+
+            return response()->json([
+                'status' => 'success',
+                'message' => "Penghuni {$penghuni->user?->nama} berhasil dipindahkan ke Kamar {$kamarBaru->nomor_kamar}.",
+                'data' => $penghuni->load('kamar.gedung.cabang', 'user'),
+            ]);
+        });
+    }
+
+    /**
+     * Get available rooms for moving tenant.
+     */
+    public function emptyRooms(Request $request): JsonResponse
+    {
+        $branchId = BranchContext::getEffectiveBranchId($request);
+
+        $query = Kamar::with('gedung.cabang')
+            ->where('status', 'kosong');
+
+        if ($branchId) {
+            $query->whereHas('gedung', fn ($g) => $g->where('cabang_id', $branchId));
+        }
+
+        $rooms = $query->orderBy('nomor_kamar')->get();
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $rooms,
+        ]);
+    }
+
+    /**
+     * Get troublesome tenants (pelacakan penyewa bermasalah).
+     * Calculates unpaid/overdue bills, warnings, and risk level.
+     */
+    public function penyewaBermasalah(Request $request): JsonResponse
+    {
+        $branchId = BranchContext::getEffectiveBranchId($request);
+
+        $query = Penghuni::with([
+            'user',
+            'kamar.gedung.cabang',
+            'peringatan',
+            'pembayaran' => function ($pq) {
+                $pq->whereIn('status', ['telat', 'belum_bayar']);
+            },
+        ])->where('status', '!=', 'nonaktif');
+
+        if ($branchId) {
+            $query->whereHas('kamar.gedung', fn ($g) => $g->where('cabang_id', $branchId));
+        }
+
+        $allTenants = $query->get();
+
+        $troublesome = [];
+
+        foreach ($allTenants as $tenant) {
+            $unpaidCount = $tenant->pembayaran->count();
+            $totalDebt = $tenant->pembayaran->sum('jumlah_tagihan');
+            $warningCount = $tenant->peringatan->count();
+
+            // Include if they have any warning or overdue/unpaid bill or status is nunggak
+            if ($unpaidCount > 0 || $warningCount > 0 || $tenant->status === 'nunggak') {
+                $riskLevel = 'rendah';
+                if ($warningCount >= 2 || $unpaidCount >= 2 || $totalDebt >= 1500000) {
+                    $riskLevel = 'tinggi';
+                } elseif ($warningCount >= 1 || $unpaidCount >= 1) {
+                    $riskLevel = 'sedang';
+                }
+
+                $troublesome[] = [
+                    'penghuni' => $tenant,
+                    'unpaid_bills_count' => $unpaidCount,
+                    'total_tunggakan' => (float) $totalDebt,
+                    'peringatan_count' => $warningCount,
+                    'risk_level' => $riskLevel,
+                    'latest_peringatan' => $tenant->peringatan->sortByDesc('created_at')->first(),
+                ];
+            }
+        }
+
+        // Sort by risk level (tinggi first) then total debt
+        usort($troublesome, function ($a, $b) {
+            $riskWeight = ['tinggi' => 3, 'sedang' => 2, 'rendah' => 1];
+            $cmp = ($riskWeight[$b['risk_level']] ?? 0) <=> ($riskWeight[$a['risk_level']] ?? 0);
+            if ($cmp === 0) {
+                return $b['total_tunggakan'] <=> $a['total_tunggakan'];
+            }
+
+            return $cmp;
+        });
+
+        return response()->json([
+            'status' => 'success',
+            'total_bermasalah' => count($troublesome),
+            'data' => $troublesome,
+        ]);
+    }
+
+    /**
+     * Get curfew violations list (pelanggaran jam malam).
+     */
+    public function pelanggaranJamMalam(Request $request): JsonResponse
+    {
+        $branchId = BranchContext::getEffectiveBranchId($request);
+
+        $query = IzinKeluar::with([
+            'penghuni.user',
+            'penghuni.kamar.gedung.cabang',
+            'penyetuju',
+        ]);
+
+        if ($branchId) {
+            $query->whereHas('penghuni.kamar.gedung', fn ($g) => $g->where('cabang_id', $branchId));
+        }
+
+        $allIzin = $query->orderBy('tanggal', 'desc')->get();
+
+        $violations = [];
+
+        foreach ($allIzin as $izin) {
+            $cabang = $izin->penghuni?->kamar?->gedung?->cabang;
+            $jamMalam = $cabang?->jam_malam ? Carbon::parse($cabang->jam_malam)->format('H:i:s') : '22:00:00';
+            $jamKembali = $izin->rencana_jam_kembali ? Carbon::parse($izin->rencana_jam_kembali)->format('H:i:s') : '00:00:00';
+
+            // Mark violation if planned return is past curfew or status was rejected but tenant still went out
+            $isViolation = ($jamKembali > $jamMalam) || ($izin->status === 'ditolak');
+
+            if ($isViolation) {
+                $violations[] = [
+                    'izin' => $izin,
+                    'jam_malam_cabang' => $jamMalam,
+                    'jam_kembali' => $jamKembali,
+                    'tipe_pelanggaran' => $jamKembali > $jamMalam ? 'Rencana Kembali Melewati Jam Malam' : 'Izin Ditolak',
+                ];
+            }
+        }
+
+        // Also fetch warning records related to curfew
+        $curfewWarnings = Peringatan::with(['penghuni.user', 'penghuni.kamar.gedung.cabang', 'pembuat'])
+            ->where(function ($q) {
+                $q->where('kategori_pelanggaran', 'like', '%jam malam%')
+                    ->orWhere('kategori_pelanggaran', 'like', '%malam%')
+                    ->orWhere('keterangan', 'like', '%jam malam%');
+            })
+            ->when($branchId, function ($q) use ($branchId) {
+                $q->whereHas('penghuni.kamar.gedung', fn ($g) => $g->where('cabang_id', $branchId));
+            })
+            ->orderBy('tanggal_kejadian', 'desc')
+            ->get();
+
+        return response()->json([
+            'status' => 'success',
+            'total_pelanggaran' => count($violations) + $curfewWarnings->count(),
+            'violations_izin' => $violations,
+            'warnings_curfew' => $curfewWarnings,
+        ]);
+    }
+
+    /**
+     * Send official warning to tenant.
+     */
+    public function kirimPeringatan(Request $request, int $id): JsonResponse
+    {
+        $request->validate([
+            'jenis' => 'required|in:nunggak,pelanggaran',
+            'kategori_pelanggaran' => 'required|string|max:100',
+            'keterangan' => 'required|string',
+            'tanggal_kejadian' => 'nullable|date',
+        ]);
+
+        $penghuni = Penghuni::with(['user', 'kamar.gedung'])->findOrFail($id);
+
+        return DB::transaction(function () use ($request, $penghuni) {
+            $peringatan = Peringatan::create([
+                'penghuni_id' => $penghuni->id,
+                'jenis' => $request->jenis,
+                'kategori_pelanggaran' => $request->kategori_pelanggaran,
+                'keterangan' => $request->keterangan,
+                'tanggal_kejadian' => $request->tanggal_kejadian ?: now()->toDateString(),
+                'dibuat_oleh' => auth()->id(),
+            ]);
+
+            // If warning is about unpaid rent, mark tenant status as nunggak
+            if ($request->jenis === 'nunggak') {
+                $penghuni->status = 'nunggak';
+                $penghuni->save();
+            }
+
+            Notifikasi::create([
+                'user_id' => $penghuni->user_id,
+                'judul' => 'Surat Peringatan Resmi',
+                'isi' => "Peringatan: {$request->kategori_pelanggaran}. Keterangan: {$request->keterangan}",
+                'tipe' => 'peringatan',
+                'redirect_url' => '/mobile-app',
+                'referensi_tabel' => 'peringatan',
+                'referensi_id' => $peringatan->id,
+                'sudah_dibaca' => false,
+            ]);
+
+            ActivityLog::create([
+                'user_id' => auth()->id(),
+                'cabang_id' => $penghuni->kamar?->gedung?->cabang_id,
+                'aksi' => 'kirim_surat_peringatan',
+                'model_type' => 'Peringatan',
+                'model_id' => $peringatan->id,
+                'keterangan' => "Admin menerbitkan surat peringatan untuk {$penghuni->user?->nama}. Kategori: {$request->kategori_pelanggaran}",
+                'created_at' => now(),
+            ]);
+
+            return response()->json([
+                'status' => 'success',
+                'message' => "Surat peringatan berhasil diterbitkan dan notifikasi telah dikirim ke {$penghuni->user?->nama}.",
+                'data' => $peringatan,
+            ]);
+        });
     }
 }

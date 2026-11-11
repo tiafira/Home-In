@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import AdminLayout from '../../Layouts/AdminLayout';
 import DataTable from '../../Components/UI/DataTable';
 import StatusBadge from '../../Components/UI/StatusBadge';
@@ -7,19 +7,32 @@ import ConfirmDialog from '../../Components/UI/ConfirmDialog';
 import { useToast } from '../../context/ToastContext';
 import { useBranch } from '../../context/BranchContext';
 import { exportToPdf } from '../../utils/exportPdf';
+import { exportToExcel, exportToCsv } from '../../utils/exportExcel';
 import api from '../../services/api';
 
 export default function Penghuni() {
     const toast = useToast();
     const { activeBranchId, branches, selectedBranchId } = useBranch();
 
+    // Section: 'penghuni' | 'bermasalah' | 'jam_malam'
+    const [activeSection, setActiveSection] = useState('penghuni');
+
+    // Sub-tab for Daftar Penghuni
     const [activeTab, setActiveTab] = useState('aktif');
     const [penghunis, setPenghunis] = useState([]);
     const [fasilitasList, setFasilitasList] = useState([]);
     const [counts, setCounts] = useState({ aktif: 0, nunggak: 0, nonaktif: 0, all: 0 });
     const [loading, setLoading] = useState(true);
 
-    // Empty rooms for adding tenant
+    // Troublesome tenants data
+    const [bermasalahList, setBermasalahList] = useState([]);
+    const [loadingBermasalah, setLoadingBermasalah] = useState(false);
+
+    // Curfew violations data
+    const [curfewData, setCurfewData] = useState({ total_pelanggaran: 0, violations_izin: [], warnings_curfew: [] });
+    const [loadingCurfew, setLoadingCurfew] = useState(false);
+
+    // Empty rooms for adding or moving tenant
     const [emptyRooms, setEmptyRooms] = useState([]);
 
     // Detail Modal
@@ -29,8 +42,35 @@ export default function Penghuni() {
     const [detailStatusReq, setDetailStatusReq] = useState('menunggu_konfirmasi');
     const [submittingDetailFasilitas, setSubmittingDetailFasilitas] = useState(false);
 
+    // Perpanjang Masa Tinggal Modal
+    const [perpanjangModalOpen, setPerpanjangModalOpen] = useState(false);
+    const [perpanjangTarget, setPerpanjangTarget] = useState(null);
+    const [perpanjangBulan, setPerpanjangBulan] = useState(1);
+    const [submittingPerpanjang, setSubmittingPerpanjang] = useState(false);
+
+    // Pindah Kamar Modal
+    const [pindahModalOpen, setPindahModalOpen] = useState(false);
+    const [pindahTarget, setPindahTarget] = useState(null);
+    const [pindahKamarBaruId, setPindahKamarBaruId] = useState('');
+    const [submittingPindah, setSubmittingPindah] = useState(false);
+    const [pindahGedungId, setPindahGedungId] = useState('');
+    const [pindahLantai, setPindahLantai] = useState('');
+
+    // Kirim Peringatan Modal
+    const [peringatanModalOpen, setPeringatanModalOpen] = useState(false);
+    const [peringatanTarget, setPeringatanTarget] = useState(null);
+    const [peringatanForm, setPeringatanForm] = useState({
+        jenis: 'nunggak',
+        kategori_pelanggaran: 'Keterlambatan Pembayaran Sewa Kost',
+        keterangan: '',
+        tanggal_kejadian: new Date().toISOString().split('T')[0],
+    });
+    const [submittingPeringatan, setSubmittingPeringatan] = useState(false);
+
     // Add Tenant Modal
     const [addModalOpen, setAddModalOpen] = useState(false);
+    const [addGedungId, setAddGedungId] = useState('');
+    const [addLantai, setAddLantai] = useState('');
     const [form, setForm] = useState({
         name: '',
         email: '',
@@ -47,6 +87,84 @@ export default function Penghuni() {
         masa_tinggal_sampai: '',
     });
     const [submittingAdd, setSubmittingAdd] = useState(false);
+
+    // Derived cascading options for Tambah Penghuni
+    const addAvailableGedungs = useMemo(() => {
+        const map = new Map();
+        emptyRooms.forEach((r) => {
+            if (r.gedung && !map.has(String(r.gedung.id))) {
+                map.set(String(r.gedung.id), {
+                    id: String(r.gedung.id),
+                    nama: r.gedung.nama_gedung,
+                    cabang: r.gedung.cabang?.nama_cabang,
+                });
+            }
+        });
+        return Array.from(map.values());
+    }, [emptyRooms]);
+
+    const addAvailableLantais = useMemo(() => {
+        if (!addGedungId) return [];
+        const lantais = new Set();
+        emptyRooms
+            .filter((r) => String(r.gedung_id) === String(addGedungId))
+            .forEach((r) => {
+                if (r.lantai !== undefined && r.lantai !== null) {
+                    lantais.add(String(r.lantai));
+                }
+            });
+        return Array.from(lantais).sort((a, b) => Number(a) - Number(b));
+    }, [emptyRooms, addGedungId]);
+
+    const addFilteredRooms = useMemo(() => {
+        if (!addGedungId || !addLantai) return [];
+        return emptyRooms.filter(
+            (r) => String(r.gedung_id) === String(addGedungId) && String(r.lantai) === String(addLantai)
+        );
+    }, [emptyRooms, addGedungId, addLantai]);
+
+    const addSelectedRoomObj = useMemo(() => {
+        return emptyRooms.find((r) => String(r.id) === String(form.kamar_id)) || null;
+    }, [emptyRooms, form.kamar_id]);
+
+    // Derived cascading options for Pindah Kamar
+    const pindahAvailableGedungs = useMemo(() => {
+        const map = new Map();
+        emptyRooms.forEach((r) => {
+            if (r.gedung && !map.has(String(r.gedung.id))) {
+                map.set(String(r.gedung.id), {
+                    id: String(r.gedung.id),
+                    nama: r.gedung.nama_gedung,
+                    cabang: r.gedung.cabang?.nama_cabang,
+                });
+            }
+        });
+        return Array.from(map.values());
+    }, [emptyRooms]);
+
+    const pindahAvailableLantais = useMemo(() => {
+        if (!pindahGedungId) return [];
+        const lantais = new Set();
+        emptyRooms
+            .filter((r) => String(r.gedung_id) === String(pindahGedungId))
+            .forEach((r) => {
+                if (r.lantai !== undefined && r.lantai !== null) {
+                    lantais.add(String(r.lantai));
+                }
+            });
+        return Array.from(lantais).sort((a, b) => Number(a) - Number(b));
+    }, [emptyRooms, pindahGedungId]);
+
+    const pindahFilteredRooms = useMemo(() => {
+        if (!pindahGedungId || !pindahLantai) return [];
+        return emptyRooms.filter(
+            (r) => String(r.gedung_id) === String(pindahGedungId) && String(r.lantai) === String(pindahLantai)
+        );
+    }, [emptyRooms, pindahGedungId, pindahLantai]);
+
+    const pindahSelectedRoomObj = useMemo(() => {
+        return emptyRooms.find((r) => String(r.id) === String(pindahKamarBaruId)) || null;
+    }, [emptyRooms, pindahKamarBaruId]);
 
     // Import Google Form (CSV) Modal
     const [importModalOpen, setImportModalOpen] = useState(false);
@@ -81,9 +199,37 @@ export default function Penghuni() {
         }
     }, [activeTab, activeBranchId, toast]);
 
+    const fetchBermasalah = useCallback(async () => {
+        setLoadingBermasalah(true);
+        try {
+            const res = await api.get('/admin/penghuni/bermasalah');
+            if (res.data.status === 'success') {
+                setBermasalahList(res.data.data || []);
+            }
+        } catch (err) {
+            toast.error('Gagal memuat pelacakan penyewa bermasalah.');
+        } finally {
+            setLoadingBermasalah(false);
+        }
+    }, [activeBranchId, toast]);
+
+    const fetchCurfew = useCallback(async () => {
+        setLoadingCurfew(true);
+        try {
+            const res = await api.get('/admin/penghuni/pelanggaran-jam-malam');
+            if (res.data.status === 'success') {
+                setCurfewData(res.data);
+            }
+        } catch (err) {
+            toast.error('Gagal memuat data pelanggaran jam malam.');
+        } finally {
+            setLoadingCurfew(false);
+        }
+    }, [activeBranchId, toast]);
+
     const fetchEmptyRooms = async () => {
         try {
-            const res = await api.get('/admin/kamar-gedung', { params: { status: 'kosong' } });
+            const res = await api.get('/admin/penghuni/empty-rooms');
             if (res.data.status === 'success') {
                 setEmptyRooms(res.data.data || []);
                 return res.data.data || [];
@@ -95,16 +241,172 @@ export default function Penghuni() {
     };
 
     useEffect(() => {
-        fetchPenghuni();
-    }, [fetchPenghuni]);
+        if (activeSection === 'penghuni') {
+            fetchPenghuni();
+        } else if (activeSection === 'bermasalah') {
+            fetchBermasalah();
+        } else if (activeSection === 'jam_malam') {
+            fetchCurfew();
+        }
+    }, [activeSection, fetchPenghuni, fetchBermasalah, fetchCurfew]);
+
+    // Open Perpanjang Masa Tinggal modal
+    const handleOpenPerpanjang = (penghuni) => {
+        setPerpanjangTarget(penghuni);
+        setPerpanjangBulan(1);
+        setPerpanjangModalOpen(true);
+    };
+
+    const handlePerpanjangSubmit = async (e) => {
+        e.preventDefault();
+        if (!perpanjangTarget) return;
+        setSubmittingPerpanjang(true);
+        try {
+            const res = await api.post(`/admin/penghuni/${perpanjangTarget.id}/perpanjang`, {
+                durasi_bulan: perpanjangBulan,
+            });
+            toast.success(res.data.message || 'Masa tinggal berhasil diperpanjang!');
+            setPerpanjangModalOpen(false);
+            if (detailModalOpen) setDetailModalOpen(false);
+            fetchPenghuni();
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Gagal memperpanjang masa tinggal.');
+        } finally {
+            setSubmittingPerpanjang(false);
+        }
+    };
+
+    // Open Pindah Kamar modal
+    const handleOpenPindahKamar = async (penghuni) => {
+        setPindahTarget(penghuni);
+        const rooms = await fetchEmptyRooms();
+        let initGedung = '';
+        let initLantai = '';
+        let initKamarId = '';
+        if (rooms && rooms.length > 0) {
+            const currentGedungId = penghuni.kamar?.gedung_id ? String(penghuni.kamar.gedung_id) : '';
+            const hasSameGedung = rooms.some((r) => String(r.gedung_id) === currentGedungId);
+            initGedung = hasSameGedung ? currentGedungId : String(rooms[0].gedung_id);
+            const floors = rooms
+                .filter((r) => String(r.gedung_id) === initGedung)
+                .map((r) => String(r.lantai));
+            const uniqueFloors = Array.from(new Set(floors)).sort((a, b) => Number(a) - Number(b));
+            initLantai = uniqueFloors[0] || (rooms[0].lantai !== undefined ? String(rooms[0].lantai) : '');
+            const matching = rooms.filter(
+                (r) => String(r.gedung_id) === initGedung && String(r.lantai) === initLantai
+            );
+            initKamarId = matching[0]?.id || rooms[0].id;
+        }
+        setPindahGedungId(initGedung);
+        setPindahLantai(initLantai);
+        setPindahKamarBaruId(initKamarId);
+        setPindahModalOpen(true);
+    };
+
+    const handlePindahGedungChange = (e) => {
+        const newGedungId = e.target.value;
+        setPindahGedungId(newGedungId);
+        const floors = emptyRooms
+            .filter((r) => String(r.gedung_id) === String(newGedungId))
+            .map((r) => String(r.lantai));
+        const uniqueFloors = Array.from(new Set(floors)).sort((a, b) => Number(a) - Number(b));
+        if (uniqueFloors.length > 0) {
+            const firstFloor = uniqueFloors[0];
+            setPindahLantai(firstFloor);
+            const matching = emptyRooms.filter(
+                (r) => String(r.gedung_id) === String(newGedungId) && String(r.lantai) === firstFloor
+            );
+            setPindahKamarBaruId(matching[0]?.id || '');
+        } else {
+            setPindahLantai('');
+            setPindahKamarBaruId('');
+        }
+    };
+
+    const handlePindahLantaiChange = (e) => {
+        const newLantai = e.target.value;
+        setPindahLantai(newLantai);
+        const matching = emptyRooms.filter(
+            (r) => String(r.gedung_id) === String(pindahGedungId) && String(r.lantai) === String(newLantai)
+        );
+        setPindahKamarBaruId(matching[0]?.id || '');
+    };
+
+    const handlePindahKamarSubmit = async (e) => {
+        e.preventDefault();
+        if (!pindahTarget || !pindahKamarBaruId) {
+            toast.warning('Pilih kamar baru yang masih kosong.');
+            return;
+        }
+        setSubmittingPindah(true);
+        try {
+            const res = await api.post(`/admin/penghuni/${pindahTarget.id}/pindah-kamar`, {
+                kamar_baru_id: pindahKamarBaruId,
+            });
+            toast.success(res.data.message || 'Penghuni berhasil dipindahkan ke kamar baru!');
+            setPindahModalOpen(false);
+            if (detailModalOpen) setDetailModalOpen(false);
+            fetchPenghuni();
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Gagal memindahkan kamar penghuni.');
+        } finally {
+            setSubmittingPindah(false);
+        }
+    };
+
+    // Open Kirim Peringatan modal
+    const handleOpenPeringatan = (penghuni) => {
+        setPeringatanTarget(penghuni);
+        setPeringatanForm({
+            jenis: 'nunggak',
+            kategori_pelanggaran: 'Keterlambatan Pembayaran Sewa Kost',
+            keterangan: '',
+            tanggal_kejadian: new Date().toISOString().split('T')[0],
+        });
+        setPeringatanModalOpen(true);
+    };
+
+    const handlePeringatanSubmit = async (e) => {
+        e.preventDefault();
+        if (!peringatanTarget) return;
+        setSubmittingPeringatan(true);
+        try {
+            const res = await api.post(`/admin/penghuni/${peringatanTarget.id}/peringatan`, peringatanForm);
+            toast.success(res.data.message || 'Surat peringatan berhasil diterbitkan!');
+            setPeringatanModalOpen(false);
+            if (activeSection === 'bermasalah') fetchBermasalah();
+            else fetchPenghuni();
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Gagal menerbitkan surat peringatan.');
+        } finally {
+            setSubmittingPeringatan(false);
+        }
+    };
 
     const handleOpenAddModal = async () => {
         const rooms = await fetchEmptyRooms();
+        let initGedung = '';
+        let initLantai = '';
+        let initKamarId = '';
+        if (rooms && rooms.length > 0) {
+            initGedung = rooms[0].gedung_id ? String(rooms[0].gedung_id) : '';
+            const floors = rooms
+                .filter((r) => String(r.gedung_id) === initGedung)
+                .map((r) => String(r.lantai));
+            const uniqueFloors = Array.from(new Set(floors)).sort((a, b) => Number(a) - Number(b));
+            initLantai = uniqueFloors[0] || (rooms[0].lantai !== undefined ? String(rooms[0].lantai) : '');
+            const matching = rooms.filter(
+                (r) => String(r.gedung_id) === initGedung && String(r.lantai) === initLantai
+            );
+            initKamarId = matching[0]?.id || rooms[0].id;
+        }
+        setAddGedungId(initGedung);
+        setAddLantai(initLantai);
         setForm({
             name: '',
             email: '',
             no_hp: '',
-            kamar_id: rooms[0]?.id || '',
+            kamar_id: initKamarId,
             fasilitas_id: '',
             fasilitas_custom: '',
             status_request: 'menunggu_konfirmasi',
@@ -116,6 +418,35 @@ export default function Penghuni() {
             masa_tinggal_sampai: '',
         });
         setAddModalOpen(true);
+    };
+
+    const handleAddGedungChange = (e) => {
+        const newGedungId = e.target.value;
+        setAddGedungId(newGedungId);
+        const floors = emptyRooms
+            .filter((r) => String(r.gedung_id) === String(newGedungId))
+            .map((r) => String(r.lantai));
+        const uniqueFloors = Array.from(new Set(floors)).sort((a, b) => Number(a) - Number(b));
+        if (uniqueFloors.length > 0) {
+            const firstFloor = uniqueFloors[0];
+            setAddLantai(firstFloor);
+            const matching = emptyRooms.filter(
+                (r) => String(r.gedung_id) === String(newGedungId) && String(r.lantai) === firstFloor
+            );
+            setForm((prev) => ({ ...prev, kamar_id: matching[0]?.id || '' }));
+        } else {
+            setAddLantai('');
+            setForm((prev) => ({ ...prev, kamar_id: '' }));
+        }
+    };
+
+    const handleAddLantaiChange = (e) => {
+        const newLantai = e.target.value;
+        setAddLantai(newLantai);
+        const matching = emptyRooms.filter(
+            (r) => String(r.gedung_id) === String(addGedungId) && String(r.lantai) === String(newLantai)
+        );
+        setForm((prev) => ({ ...prev, kamar_id: matching[0]?.id || '' }));
     };
 
     const handleAddSubmit = async (e) => {
@@ -138,7 +469,6 @@ export default function Penghuni() {
         }
     };
 
-    // Quick request facility from Table Dropdown or Detail Modal
     const handleQuickRequestFasilitas = async (penghuniId, fasilitasId, statusRequest = 'menunggu_konfirmasi', customName = null) => {
         if (!fasilitasId && !customName) return;
         try {
@@ -226,19 +556,60 @@ export default function Penghuni() {
                     render: (r) =>
                         `Kamar ${r.kamar?.nomor_kamar || '-'} (${r.kamar?.gedung?.cabang?.nama_cabang || '-'})`,
                 },
-                {
-                    header: 'Fasilitas Req',
-                    render: (r) =>
-                        (r.kamar?.kamar_fasilitas || [])
-                            .map((kf) => `${kf.fasilitas?.nama_fasilitas || '-'} (${kf.status_request})`)
-                            .join(', ') || '-',
-                },
                 { header: 'Tgl Masuk', accessor: 'tanggal_masuk' },
+                { header: 'Masa Tinggal Sampai', accessor: 'masa_tinggal_sampai' },
                 { header: 'Status', render: (r) => (r.status || '').toUpperCase() },
             ],
             data: penghunis,
             summary: `Total Penghuni Aktif: ${counts.aktif} | Menunggak: ${counts.nunggak} | Alumni/Keluar: ${counts.nonaktif}`,
         });
+    };
+
+    const handleExportExcel = () => {
+        const headers = ['No', 'Nama Penghuni', 'Email', 'No HP', 'No KTP', 'Nomor Kamar', 'Gedung', 'Cabang', 'Tgl Masuk', 'Masa Tinggal Sampai', 'Status'];
+        const rows = penghunis.map((r, i) => [
+            i + 1,
+            r.user?.nama || r.user?.name || '-',
+            r.user?.email || '-',
+            r.user?.no_hp || '-',
+            r.no_ktp || '-',
+            r.kamar?.nomor_kamar || '-',
+            r.kamar?.gedung?.nama_gedung || '-',
+            r.kamar?.gedung?.cabang?.nama_cabang || '-',
+            r.tanggal_masuk || '-',
+            r.masa_tinggal_sampai || '-',
+            (r.status || '').toUpperCase(),
+        ]);
+        exportToExcel({
+            filename: `data-penghuni-${new Date().toISOString().split('T')[0]}.xls`,
+            title: 'Data Penyewa Kost Home-In',
+            headers,
+            rows,
+        });
+        toast.success('Data penghuni berhasil diekspor ke Excel!');
+    };
+
+    const handleExportCsv = () => {
+        const headers = ['No', 'Nama Penghuni', 'Email', 'No HP', 'No KTP', 'Nomor Kamar', 'Gedung', 'Cabang', 'Tgl Masuk', 'Masa Tinggal Sampai', 'Status'];
+        const rows = penghunis.map((r, i) => [
+            i + 1,
+            r.user?.nama || r.user?.name || '-',
+            r.user?.email || '-',
+            r.user?.no_hp || '-',
+            r.no_ktp || '-',
+            r.kamar?.nomor_kamar || '-',
+            r.kamar?.gedung?.nama_gedung || '-',
+            r.kamar?.gedung?.cabang?.nama_cabang || '-',
+            r.tanggal_masuk || '-',
+            r.masa_tinggal_sampai || '-',
+            (r.status || '').toUpperCase(),
+        ]);
+        exportToCsv({
+            filename: `data-penghuni-${new Date().toISOString().split('T')[0]}.csv`,
+            headers,
+            rows,
+        });
+        toast.success('Data penghuni berhasil diekspor ke CSV!');
     };
 
     const handleOpenImportModal = async () => {
@@ -248,77 +619,66 @@ export default function Penghuni() {
         setImportModalOpen(true);
     };
 
-    const parseGoogleFormCsv = (text) => {
-        setCsvRaw(text);
-        if (!text.trim()) {
-            setImportRows([]);
-            return;
-        }
-        const lines = text
-            .split(/\r?\n/)
-            .map((l) => l.trim())
-            .filter(Boolean);
+    const parseCsv = (text) => {
+        const lines = text.split('\n').filter((l) => l.trim().length > 0);
+        if (lines.length <= 1) return [];
 
-        if (lines.length === 0) {
-            setImportRows([]);
-            return;
-        }
-
-        const firstLineLower = lines[0].toLowerCase();
-        const hasHeader =
-            firstLineLower.includes('nama') ||
-            firstLineLower.includes('email') ||
-            firstLineLower.includes('timestamp');
-
-        const dataLines = hasHeader ? lines.slice(1) : lines;
-
-        const parsed = dataLines
-            .map((line, index) => {
-                const cols = line.split(',').map((c) => c.replace(/^"|"$/g, '').trim());
-                const offset = hasHeader && firstLineLower.startsWith('timestamp') ? 1 : 0;
-                const defaultRoomId = emptyRooms[index]?.id || emptyRooms[0]?.id || '';
-
-                return {
-                    nama: cols[offset] || '',
-                    email: cols[offset + 1] || '',
-                    no_hp: cols[offset + 2] || '',
-                    no_ktp: cols[offset + 3] || '',
-                    alamat_asal: cols[offset + 4] || '',
-                    kamar_id: defaultRoomId,
+        const rows = [];
+        for (let i = 1; i < lines.length; i++) {
+            const cols = lines[i].split(',').map((c) => c.trim().replace(/^["']|["']$/g, ''));
+            if (cols.length >= 3 && cols[1] && cols[2]) {
+                rows.push({
+                    timestamp: cols[0] || '',
+                    nama: cols[1] || '',
+                    email: cols[2] || '',
+                    no_hp: cols[3] || '',
+                    no_ktp: cols[4] || '',
+                    alamat_asal: cols[5] || '',
+                    tanggal_masuk: cols[6] || new Date().toISOString().split('T')[0],
+                    fasilitas_pilihan: cols[7] || '',
                     fasilitas_id: '',
-                    tanggal_masuk: new Date().toISOString().split('T')[0],
-                };
-            })
-            .filter((r) => r.nama || r.email);
+                    kamar_id: emptyRooms[0]?.id || '',
+                });
+            }
+        }
+        return rows;
+    };
 
+    const handleCsvTextChange = (text) => {
+        setCsvRaw(text);
+        const parsed = parseCsv(text);
         setImportRows(parsed);
     };
 
-    const handleCsvFileChange = (e) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (evt) => {
-            parseGoogleFormCsv(evt.target?.result || '');
-        };
-        reader.readAsText(file);
-    };
-
-    const handleImportSubmit = async (e) => {
-        e.preventDefault();
+    const handleImportSubmit = async () => {
         if (importRows.length === 0) {
-            toast.warning('Belum ada baris data valid untuk diimpor.');
+            toast.warning('Tidak ada baris data CSV yang valid untuk diimpor.');
             return;
         }
-        const missingRoom = importRows.some((r) => !r.kamar_id);
-        if (missingRoom) {
-            toast.warning('Pastikan setiap calon penghuni telah dipilihkan kamar yang kosong.');
+
+        const unassigned = importRows.find((r) => !r.kamar_id);
+        if (unassigned) {
+            toast.error(`Pilih kamar kosong terlebih dahulu untuk calon penghuni "${unassigned.nama}".`);
             return;
         }
+
         setSubmittingImport(true);
         try {
-            const res = await api.post('/admin/penghuni/import', { items: importRows });
-            toast.success(res.data.message || 'Data Google Form berhasil diimpor!');
+            const payload = {
+                items: importRows.map((r) => ({
+                    nama: r.nama,
+                    email: r.email,
+                    no_hp: r.no_hp,
+                    no_ktp: r.no_ktp,
+                    alamat_asal: r.alamat_asal,
+                    tanggal_masuk: r.tanggal_masuk,
+                    kamar_id: r.kamar_id,
+                    fasilitas_id: r.fasilitas_id || null,
+                })),
+            };
+
+            const res = await api.post('/admin/penghuni/import', payload);
+            toast.success(res.data.message || 'Impor data Google Form berhasil!');
             setImportModalOpen(false);
             fetchPenghuni();
         } catch (err) {
@@ -330,9 +690,9 @@ export default function Penghuni() {
 
     const tabs = [
         { key: 'aktif', label: 'Penghuni Aktif', count: counts.aktif },
-        { key: 'nunggak', label: 'Menunggak', count: counts.nunggak, alert: counts.nunggak > 0 },
-        { key: 'nonaktif', label: 'Riwayat (Alumni/Keluar)', count: counts.nonaktif },
-        { key: 'all', label: 'Semua', count: counts.all },
+        { key: 'nunggak', label: 'Menunggak Sewa', count: counts.nunggak, alert: true },
+        { key: 'nonaktif', label: 'Keluar / Alumni', count: counts.nonaktif },
+        { key: 'all', label: 'Semua Status', count: counts.all },
     ];
 
     const columns = [
@@ -345,6 +705,7 @@ export default function Penghuni() {
                     <div className="text-xs text-slate-500">
                         {row.user?.email || '-'} • {row.user?.no_hp || '-'}
                     </div>
+                    {row.no_ktp && <div className="text-[11px] text-slate-400">KTP: {row.no_ktp}</div>}
                 </div>
             ),
         },
@@ -354,7 +715,7 @@ export default function Penghuni() {
             className: 'whitespace-nowrap',
             render: (row) => (
                 <div>
-                    <div className="font-semibold text-[#263b53]">
+                    <div className="font-semibold text-[#1E5FC9]">
                         Kamar {row.kamar?.nomor_kamar || '-'} (Lt. {row.kamar?.lantai || 1})
                     </div>
                     <div className="text-xs text-slate-500">
@@ -364,78 +725,59 @@ export default function Penghuni() {
             ),
         },
         {
-            key: 'fasilitas_req',
-            label: 'Request Fasilitas',
+            key: 'masa_tinggal',
+            label: 'Masa Tinggal & Hitung Mundur',
+            className: 'whitespace-nowrap text-xs',
             render: (row) => {
-                const kfList = row.kamar?.kamar_fasilitas || [];
-                return (
-                    <div className="space-y-1.5 min-w-[190px]">
-                        {kfList.length > 0 ? (
-                            <div className="flex flex-wrap gap-1">
-                                {kfList.map((kf) => (
-                                    <span
-                                        key={kf.id}
-                                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-semibold border ${
-                                            kf.status_request === 'aktif'
-                                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                                : kf.status_request === 'menunggu_konfirmasi'
-                                                ? 'bg-amber-50 text-amber-700 border-amber-200'
-                                                : 'bg-rose-50 text-rose-700 border-rose-200'
-                                        }`}
-                                    >
-                                        <span>{kf.fasilitas?.nama_fasilitas || 'Fasilitas'}</span>
-                                        <span className="opacity-75 text-[10px]">
-                                            ({kf.status_request === 'menunggu_konfirmasi' ? 'Req' : kf.status_request})
-                                        </span>
-                                    </span>
-                                ))}
-                            </div>
-                        ) : (
-                            <span className="text-xs text-slate-400 italic block">Belum ada request</span>
-                        )}
+                let daysLeftBadge = null;
+                if (row.masa_tinggal_sampai) {
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    const expiry = new Date(row.masa_tinggal_sampai);
+                    expiry.setHours(0, 0, 0, 0);
+                    const diffDays = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
 
-                        {/* Dropdown langsung untuk tambah / request fasilitas penghuni */}
-                        {row.status !== 'nonaktif' && (
-                            <select
-                                defaultValue=""
-                                onChange={(e) => {
-                                    const val = e.target.value;
-                                    if (val) {
-                                        handleQuickRequestFasilitas(row.id, val, 'menunggu_konfirmasi');
-                                        e.target.value = '';
-                                    }
-                                }}
-                                className="w-full px-2.5 py-1 text-xs border border-slate-200 rounded-lg bg-slate-50 hover:bg-white text-[#263b53] font-medium focus:outline-none focus:border-[#263b53] cursor-pointer"
-                            >
-                                <option value="">+ Pilih Fasilitas Req...</option>
-                                {fasilitasList.map((f) => (
-                                    <option key={f.id} value={f.id}>
-                                        {f.nama_fasilitas}{' '}
-                                        {Number(f.biaya_tambahan) > 0
-                                            ? `(+Rp ${Number(f.biaya_tambahan).toLocaleString('id-ID')})`
-                                            : '(Default)'}
-                                    </option>
-                                ))}
-                            </select>
+                    if (diffDays < 0) {
+                        daysLeftBadge = (
+                            <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700">
+                                Lewat {Math.abs(diffDays)} hari
+                            </span>
+                        );
+                    } else if (diffDays === 0) {
+                        daysLeftBadge = (
+                            <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
+                                Berakhir Hari Ini
+                            </span>
+                        );
+                    } else if (diffDays <= 7) {
+                        daysLeftBadge = (
+                            <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                {diffDays} hari lagi
+                            </span>
+                        );
+                    } else {
+                        daysLeftBadge = (
+                            <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700">
+                                {diffDays} hari lagi
+                            </span>
+                        );
+                    }
+                }
+
+                return (
+                    <div className="space-y-0.5">
+                        <div className="text-slate-600">
+                            Masuk: <strong>{row.tanggal_masuk}</strong>
+                        </div>
+                        {row.masa_tinggal_sampai && (
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-slate-500">s/d {row.masa_tinggal_sampai}</span>
+                                {daysLeftBadge}
+                            </div>
                         )}
                     </div>
                 );
             },
-        },
-        {
-            key: 'tanggal_masuk',
-            label: 'Masa Tinggal',
-            className: 'whitespace-nowrap text-xs text-slate-600',
-            render: (row) => (
-                <div>
-                    <div>
-                        Masuk: <strong>{row.tanggal_masuk}</strong>
-                    </div>
-                    {row.masa_tinggal_sampai && (
-                        <div className="text-slate-400">Sampai: {row.masa_tinggal_sampai}</div>
-                    )}
-                </div>
-            ),
         },
         {
             key: 'status',
@@ -445,19 +787,39 @@ export default function Penghuni() {
         },
         {
             key: 'actions',
-            label: 'Aksi',
+            label: 'Aksi Cepat',
             className: 'text-right whitespace-nowrap',
             render: (row) => (
-                <div className="flex items-center justify-end gap-2">
+                <div className="flex items-center justify-end gap-1.5">
+                    {row.status === 'aktif' && (
+                        <>
+                            <button
+                                type="button"
+                                onClick={() => handleOpenPerpanjang(row)}
+                                className="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition"
+                                title="Perpanjang masa sewa"
+                            >
+                                Perpanjang
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleOpenPindahKamar(row)}
+                                className="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 transition"
+                                title="Pindahkan ke kamar kosong lain"
+                            >
+                                Pindah Kamar
+                            </button>
+                        </>
+                    )}
                     <button
                         type="button"
                         onClick={() => {
                             setSelectedPenghuni(row);
                             setDetailModalOpen(true);
                         }}
-                        className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-50 text-[#263b53] hover:bg-blue-100 transition cursor-pointer"
+                        className="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-[#EAF1FC] text-[#1E5FC9] hover:bg-blue-100 transition"
                     >
-                        Detail & Fasilitas
+                        Detail
                     </button>
                     {row.status === 'aktif' && (
                         <button
@@ -466,7 +828,7 @@ export default function Penghuni() {
                                 setCheckoutTarget(row);
                                 setCheckoutDialogOpen(true);
                             }}
-                            className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 transition cursor-pointer"
+                            className="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 transition"
                         >
                             Checkout
                         </button>
@@ -478,103 +840,599 @@ export default function Penghuni() {
 
     return (
         <AdminLayout
-            title="Data Penghuni"
-            subtitle="Manajemen data penghuni aktif, request fasilitas tambahan, import pendaftaran Google Form, serta proses check-out."
+            title="Penyewa & Penghuni"
+            subtitle="Manajemen penyewa aktif, hitung mundur masa tinggal, perpanjang sewa, pindah kamar, pelacakan penyewa bermasalah, dan kepatuhan jam malam."
         >
-            {/* Header Action Bar */}
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
-                <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                    {tabs.map((tab) => {
-                        const isActive = activeTab === tab.key;
-                        return (
-                            <button
-                                key={tab.key}
-                                type="button"
-                                onClick={() => setActiveTab(tab.key)}
-                                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition whitespace-nowrap cursor-pointer ${
-                                    isActive
-                                        ? 'bg-[#263b53] text-white shadow-sm'
-                                        : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-                                }`}
-                            >
-                                <span>{tab.label}</span>
-                                {tab.count > 0 && (
-                                    <span
-                                        className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+            {/* Top Switcher: Penghuni Aktif vs Penyewa Bermasalah vs Jam Malam */}
+            <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-2xl mb-6 self-start w-fit">
+                <button
+                    onClick={() => setActiveSection('penghuni')}
+                    className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${
+                        activeSection === 'penghuni'
+                            ? 'bg-white text-slate-800 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                >
+                    👥 Daftar Penyewa
+                </button>
+                <button
+                    onClick={() => setActiveSection('bermasalah')}
+                    className={`px-4 py-2 rounded-xl text-sm font-semibold transition flex items-center gap-1.5 ${
+                        activeSection === 'bermasalah'
+                            ? 'bg-white text-rose-700 shadow-sm'
+                            : 'text-slate-500 hover:text-rose-600'
+                    }`}
+                >
+                    <span>⚠️ Pelacakan Penyewa Bermasalah</span>
+                </button>
+                <button
+                    onClick={() => setActiveSection('jam_malam')}
+                    className={`px-4 py-2 rounded-xl text-sm font-semibold transition flex items-center gap-1.5 ${
+                        activeSection === 'jam_malam'
+                            ? 'bg-white text-purple-700 shadow-sm'
+                            : 'text-slate-500 hover:text-purple-600'
+                    }`}
+                >
+                    <span>🌙 Pelanggaran Jam Malam</span>
+                </button>
+            </div>
+
+            {/* SECTION 1: DAFTAR PENGHUNI */}
+            {activeSection === 'penghuni' && (
+                <>
+                    {/* Header Action Bar */}
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
+                        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                            {tabs.map((tab) => {
+                                const isActive = activeTab === tab.key;
+                                return (
+                                    <button
+                                        key={tab.key}
+                                        type="button"
+                                        onClick={() => setActiveTab(tab.key)}
+                                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition whitespace-nowrap cursor-pointer ${
                                             isActive
-                                                ? 'bg-white/20 text-white'
-                                                : tab.alert
-                                                ? 'bg-rose-100 text-rose-700'
-                                                : 'bg-slate-100 text-slate-700'
+                                                ? 'bg-[#1E5FC9] text-white shadow-sm'
+                                                : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
                                         }`}
                                     >
-                                        {tab.count}
-                                    </span>
-                                )}
+                                        <span>{tab.label}</span>
+                                        {tab.count > 0 && (
+                                            <span
+                                                className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                                                    isActive
+                                                        ? 'bg-white/20 text-white'
+                                                        : tab.alert
+                                                        ? 'bg-rose-100 text-rose-700'
+                                                        : 'bg-slate-100 text-slate-700'
+                                                }`}
+                                            >
+                                                {tab.count}
+                                            </span>
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                                <button
+                                    type="button"
+                                    onClick={handleExportExcel}
+                                    title="Export Data ke Excel (.xls)"
+                                    className="px-2.5 py-1.5 text-xs font-bold text-emerald-700 hover:bg-white rounded-lg transition cursor-pointer flex items-center gap-1"
+                                >
+                                    <span>📊 Excel</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleExportCsv}
+                                    title="Export Data ke CSV"
+                                    className="px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-white rounded-lg transition cursor-pointer flex items-center gap-1"
+                                >
+                                    <span>📑 CSV</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleExportPdf}
+                                    title="Cetak atau Simpan PDF"
+                                    className="px-2.5 py-1.5 text-xs font-bold text-rose-700 hover:bg-white rounded-lg transition cursor-pointer flex items-center gap-1"
+                                >
+                                    <span>🖨️ PDF</span>
+                                </button>
+                            </div>
+
+                            <button
+                                type="button"
+                                onClick={handleOpenImportModal}
+                                className="px-3.5 py-2.5 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded-xl shadow-xs transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer"
+                            >
+                                <span>Import Google Form (CSV)</span>
                             </button>
-                        );
-                    })}
+
+                            <button
+                                type="button"
+                                onClick={handleOpenAddModal}
+                                className="px-4 py-2.5 text-xs font-bold text-white bg-[#1E5FC9] hover:bg-blue-700 rounded-xl shadow-sm transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer"
+                            >
+                                + Tambah Penghuni Baru
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Table */}
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+                        <DataTable
+                            columns={columns}
+                            data={penghunis}
+                            loading={loading}
+                            searchPlaceholder="Cari nama penghuni, email, no KTP, kamar..."
+                            emptyTitle="Tidak ada data penghuni"
+                            emptyDescription="Belum ada penghuni pada kategori ini."
+                        />
+                    </div>
+                </>
+            )}
+
+            {/* SECTION 2: PELACAKAN PENYEWA BERMASALAH */}
+            {activeSection === 'bermasalah' && (
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-4">
+                        <div>
+                            <h3 className="text-base font-bold text-slate-800">
+                                Daftar Penyewa Bermasalah (Tunggakan & Pelanggaran)
+                            </h3>
+                            <p className="text-xs text-slate-500 mt-0.5">
+                                Dihitung otomatis dari akumulasi tagihan sewa yang telat/belum bayar dan riwayat surat peringatan.
+                            </p>
+                        </div>
+                        <span className="px-3 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-700">
+                            {bermasalahList.length} Penyewa Terdeteksi
+                        </span>
+                    </div>
+
+                    {loadingBermasalah ? (
+                        <div className="py-12 text-center text-slate-500 text-sm">
+                            <div className="w-8 h-8 border-4 border-rose-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                            Menganalisis data tagihan dan riwayat peringatan...
+                        </div>
+                    ) : bermasalahList.length === 0 ? (
+                        <div className="py-12 text-center bg-emerald-50 rounded-xl border border-emerald-200">
+                            <span className="text-3xl block mb-2">🎉</span>
+                            <h4 className="font-bold text-emerald-800 text-sm">Semua Penyewa Tertib</h4>
+                            <p className="text-xs text-emerald-600 mt-1">Tidak ada penghuni yang memiliki tunggakan menumpuk atau catatan pelanggaran aktif saat ini.</p>
+                        </div>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-sm text-slate-700">
+                                <thead className="bg-slate-50 text-xs font-semibold text-slate-500 uppercase border-b border-slate-200">
+                                    <tr>
+                                        <th className="py-3 px-4">Penghuni & Kamar</th>
+                                        <th className="py-3 px-4">Tunggakan Tagihan</th>
+                                        <th className="py-3 px-4">Total Hutang</th>
+                                        <th className="py-3 px-4">Surat Peringatan</th>
+                                        <th className="py-3 px-4">Tingkat Risiko</th>
+                                        <th className="py-3 px-4 text-right">Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {bermasalahList.map((item) => {
+                                        const p = item.penghuni;
+                                        return (
+                                            <tr key={p.id} className="hover:bg-slate-50/70">
+                                                <td className="py-3 px-4">
+                                                    <div className="font-semibold text-slate-800">{p.user?.nama || p.user?.name}</div>
+                                                    <div className="text-xs text-slate-500">
+                                                        Kamar {p.kamar?.nomor_kamar} ({p.kamar?.gedung?.cabang?.nama_cabang}) • {p.user?.no_hp || '-'}
+                                                    </div>
+                                                </td>
+                                                <td className="py-3 px-4">
+                                                    <span className={`font-semibold ${item.unpaid_bills_count > 0 ? 'text-rose-600' : 'text-slate-500'}`}>
+                                                        {item.unpaid_bills_count} bulan tagihan
+                                                    </span>
+                                                </td>
+                                                <td className="py-3 px-4 font-bold text-slate-800">
+                                                    Rp {Number(item.total_tunggakan).toLocaleString('id-ID')}
+                                                </td>
+                                                <td className="py-3 px-4">
+                                                    <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800">
+                                                        {item.peringatan_count} peringatan
+                                                    </span>
+                                                </td>
+                                                <td className="py-3 px-4">
+                                                    <span
+                                                        className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase ${
+                                                            item.risk_level === 'tinggi'
+                                                                ? 'bg-rose-100 text-rose-700'
+                                                                : item.risk_level === 'sedang'
+                                                                ? 'bg-amber-100 text-amber-800'
+                                                                : 'bg-emerald-100 text-emerald-800'
+                                                        }`}
+                                                    >
+                                                        {item.risk_level}
+                                                    </span>
+                                                </td>
+                                                <td className="py-3 px-4 text-right">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleOpenPeringatan(p)}
+                                                        className="px-3 py-1.5 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-sm transition"
+                                                    >
+                                                        Kirim Peringatan
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
                 </div>
+            )}
 
-                <div className="flex flex-wrap items-center gap-2.5">
-                    <button
-                        type="button"
-                        onClick={handleExportPdf}
-                        className="px-3.5 py-2.5 text-xs font-bold text-[#263b53] bg-white border border-slate-200 hover:bg-blue-50 rounded-xl shadow-xs transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer"
-                    >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m.75 12l3 3m0 0l3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
-                            />
-                        </svg>
-                        <span>Export PDF</span>
-                    </button>
+            {/* SECTION 3: PELANGGARAN JAM MALAM */}
+            {activeSection === 'jam_malam' && (
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-4">
+                        <div>
+                            <h3 className="text-base font-bold text-slate-800">
+                                Monitoring Pelanggaran Jam Malam
+                            </h3>
+                            <p className="text-xs text-slate-500 mt-0.5">
+                                Daftar pengajuan izin keluar yang melewati jam malam cabang kost atau penolakan izin yang terdeteksi.
+                            </p>
+                        </div>
+                        <span className="px-3 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-700">
+                            {curfewData.total_pelanggaran} Riwayat Terdata
+                        </span>
+                    </div>
 
-                    <button
-                        type="button"
-                        onClick={handleOpenImportModal}
-                        className="px-3.5 py-2.5 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded-xl shadow-xs transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer"
-                    >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"
-                            />
-                        </svg>
-                        <span>Import Google Form (CSV)</span>
-                    </button>
-
-                    <button
-                        type="button"
-                        onClick={handleOpenAddModal}
-                        className="px-4 py-2.5 text-xs font-bold text-white bg-[#263b53] hover:bg-[#1b2c3f] rounded-xl shadow-sm transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer"
-                    >
-                        + Tambah Penghuni Baru
-                    </button>
+                    {loadingCurfew ? (
+                        <div className="py-12 text-center text-slate-500 text-sm">
+                            <div className="w-8 h-8 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                            Memeriksa izin keluar dan jam malam...
+                        </div>
+                    ) : curfewData.total_pelanggaran === 0 ? (
+                        <div className="py-12 text-center bg-purple-50 rounded-xl border border-purple-200">
+                            <span className="text-3xl block mb-2">🌙</span>
+                            <h4 className="font-bold text-purple-800 text-sm">Tidak Ada Pelanggaran Jam Malam</h4>
+                            <p className="text-xs text-purple-600 mt-1">Seluruh izin keluar dan aktivitas kembali sesuai dengan batas jam malam cabang.</p>
+                        </div>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-sm text-slate-700">
+                                <thead className="bg-slate-50 text-xs font-semibold text-slate-500 uppercase border-b border-slate-200">
+                                    <tr>
+                                        <th className="py-3 px-4">Tanggal</th>
+                                        <th className="py-3 px-4">Penghuni & Kamar</th>
+                                        <th className="py-3 px-4">Jam Malam Cabang</th>
+                                        <th className="py-3 px-4">Rencana Kembali</th>
+                                        <th className="py-3 px-4">Kategori Pelanggaran</th>
+                                        <th className="py-3 px-4 text-right">Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {curfewData.violations_izin?.map((v, i) => (
+                                        <tr key={i} className="hover:bg-slate-50/70">
+                                            <td className="py-3 px-4 text-xs text-slate-500">{v.izin?.tanggal}</td>
+                                            <td className="py-3 px-4">
+                                                <div className="font-semibold text-slate-800">{v.izin?.penghuni?.user?.nama || v.izin?.penghuni?.user?.name}</div>
+                                                <div className="text-xs text-slate-500">
+                                                    Kamar {v.izin?.penghuni?.kamar?.nomor_kamar} ({v.izin?.penghuni?.kamar?.gedung?.cabang?.nama_cabang})
+                                                </div>
+                                            </td>
+                                            <td className="py-3 px-4 font-semibold text-slate-700">{v.jam_malam_cabang}</td>
+                                            <td className="py-3 px-4 font-bold text-rose-600">{v.jam_kembali}</td>
+                                            <td className="py-3 px-4">
+                                                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                                                    {v.tipe_pelanggaran}
+                                                </span>
+                                            </td>
+                                            <td className="py-3 px-4 text-right">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleOpenPeringatan(v.izin?.penghuni)}
+                                                    className="px-3 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition"
+                                                >
+                                                    Peringatkan
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
                 </div>
-            </div>
+            )}
 
-            {/* Table */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-                <DataTable
-                    columns={columns}
-                    data={penghunis}
-                    loading={loading}
-                    searchPlaceholder="Cari nama penghuni, email, no KTP, kamar..."
-                    emptyTitle="Tidak ada data penghuni"
-                    emptyDescription="Belum ada penghuni pada kategori ini."
-                />
-            </div>
+            {/* PERPANJANG MASA TINGGAL MODAL */}
+            {perpanjangTarget && (
+                <Modal
+                    isOpen={perpanjangModalOpen}
+                    onClose={() => setPerpanjangModalOpen(false)}
+                    title={`Perpanjang Masa Tinggal — ${perpanjangTarget.user?.nama || perpanjangTarget.user?.name}`}
+                    maxWidth="max-w-md"
+                    footer={
+                        <div className="flex items-center justify-end gap-2 w-full">
+                            <button
+                                type="button"
+                                onClick={() => setPerpanjangModalOpen(false)}
+                                className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-xl"
+                            >
+                                Batal
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handlePerpanjangSubmit}
+                                disabled={submittingPerpanjang}
+                                className="px-4 py-2 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 rounded-xl shadow-sm transition"
+                            >
+                                {submittingPerpanjang ? 'Menyimpan...' : 'Perpanjang Masa Tinggal'}
+                            </button>
+                        </div>
+                    }
+                >
+                    <form onSubmit={handlePerpanjangSubmit} className="space-y-4">
+                        <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-1">
+                            <div>Kamar: <strong>{perpanjangTarget.kamar?.nomor_kamar} ({perpanjangTarget.kamar?.gedung?.cabang?.nama_cabang})</strong></div>
+                            <div>Masa Tinggal Saat Ini: <strong>{perpanjangTarget.masa_tinggal_sampai || 'Belum diatur'}</strong></div>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-2">
+                                Tambahkan Durasi Sewa (Bulan) *
+                            </label>
+                            <div className="grid grid-cols-4 gap-2 mb-3">
+                                {[1, 3, 6, 12].map((bln) => (
+                                    <button
+                                        type="button"
+                                        key={bln}
+                                        onClick={() => setPerpanjangBulan(bln)}
+                                        className={`py-2 rounded-xl text-xs font-bold border transition ${
+                                            perpanjangBulan === bln
+                                                ? 'bg-[#1E5FC9] text-white border-[#1E5FC9]'
+                                                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                                        }`}
+                                    >
+                                        +{bln} Bulan
+                                    </button>
+                                ))}
+                            </div>
+                            <input
+                                type="number"
+                                min="1"
+                                max="36"
+                                required
+                                value={perpanjangBulan}
+                                onChange={(e) => setPerpanjangBulan(parseInt(e.target.value) || 1)}
+                                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl"
+                            />
+                        </div>
+                    </form>
+                </Modal>
+            )}
+
+            {/* PINDAH KAMAR MODAL */}
+            {pindahTarget && (
+                <Modal
+                    isOpen={pindahModalOpen}
+                    onClose={() => setPindahModalOpen(false)}
+                    title={`Pindah Kamar — ${pindahTarget.user?.nama || pindahTarget.user?.name}`}
+                    maxWidth="max-w-xl"
+                    footer={
+                        <div className="flex items-center justify-end gap-2 w-full">
+                            <button
+                                type="button"
+                                onClick={() => setPindahModalOpen(false)}
+                                className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-xl"
+                            >
+                                Batal
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handlePindahKamarSubmit}
+                                disabled={submittingPindah || !pindahKamarBaruId}
+                                className="px-4 py-2 text-sm font-semibold text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50 rounded-xl shadow-sm transition"
+                            >
+                                {submittingPindah ? 'Memindahkan...' : 'Konfirmasi Pindah Kamar'}
+                            </button>
+                        </div>
+                    }
+                >
+                    <form onSubmit={handlePindahKamarSubmit} className="space-y-4">
+                        <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl text-xs text-purple-900 leading-relaxed">
+                            Kamar lama (<strong>Kamar {pindahTarget.kamar?.nomor_kamar}</strong>, Lt. {pindahTarget.kamar?.lantai}) akan otomatis dikembalikan ke status <strong>Kosong</strong>, dan kamar tujuan baru akan berubah menjadi <strong>Terisi</strong> dalam satu transaksi aman.
+                        </div>
+
+                        {/* Cascading Room Selection: Gedung -> Lantai -> Kamar Kosong */}
+                        <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                                    <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                                    </svg>
+                                    Pilih Unit Kamar Tujuan Baru
+                                </span>
+                                <span className="text-[11px] text-slate-500 font-medium">
+                                    Gedung &rarr; Lantai &rarr; Kamar
+                                </span>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                                {/* Step 1: Gedung */}
+                                <div>
+                                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                                        1. Gedung Tujuan *
+                                    </label>
+                                    <select
+                                        required
+                                        value={pindahGedungId}
+                                        onChange={handlePindahGedungChange}
+                                        className="w-full px-2.5 py-2 text-xs font-medium border border-slate-300 rounded-xl bg-white text-slate-800 focus:ring-2 focus:ring-purple-100 focus:border-purple-600"
+                                    >
+                                        <option value="">-- Pilih Gedung --</option>
+                                        {pindahAvailableGedungs.map((g) => (
+                                            <option key={g.id} value={g.id}>
+                                                {g.nama} {g.cabang ? `(${g.cabang})` : ''}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {/* Step 2: Lantai */}
+                                <div>
+                                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                                        2. Lantai Tujuan *
+                                    </label>
+                                    <select
+                                        required
+                                        disabled={!pindahGedungId || pindahAvailableLantais.length === 0}
+                                        value={pindahLantai}
+                                        onChange={handlePindahLantaiChange}
+                                        className="w-full px-2.5 py-2 text-xs font-medium border border-slate-300 rounded-xl bg-white text-slate-800 disabled:bg-slate-100 disabled:text-slate-400 focus:ring-2 focus:ring-purple-100 focus:border-purple-600"
+                                    >
+                                        <option value="">{pindahGedungId ? '-- Pilih Lantai --' : 'Pilih Gedung dulu'}</option>
+                                        {pindahAvailableLantais.map((lt) => (
+                                            <option key={lt} value={lt}>
+                                                Lantai {lt}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {/* Step 3: Kamar Kosong */}
+                                <div>
+                                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                                        3. Kamar Kosong *
+                                    </label>
+                                    <select
+                                        required
+                                        disabled={!pindahLantai || pindahFilteredRooms.length === 0}
+                                        value={pindahKamarBaruId}
+                                        onChange={(e) => setPindahKamarBaruId(e.target.value)}
+                                        className="w-full px-2.5 py-2 text-xs font-medium border border-slate-300 rounded-xl bg-white text-slate-800 disabled:bg-slate-100 disabled:text-slate-400 focus:ring-2 focus:ring-purple-100 focus:border-purple-600"
+                                    >
+                                        <option value="">{pindahLantai ? (pindahFilteredRooms.length > 0 ? '-- Pilih Kamar --' : 'Tidak ada kamar') : 'Pilih Lantai dulu'}</option>
+                                        {pindahFilteredRooms.map((rm) => (
+                                            <option key={rm.id} value={rm.id}>
+                                                Kamar {rm.nomor_kamar} (Rp {Number(rm.harga_bulanan).toLocaleString('id-ID')})
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+
+                            {/* Selected Room Badge / Status */}
+                            {pindahSelectedRoomObj ? (
+                                <div className="p-2.5 bg-purple-50/80 border border-purple-200 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs text-purple-950">
+                                    <div className="flex items-center gap-2">
+                                        <span className="w-2 h-2 rounded-full bg-purple-600 animate-pulse" />
+                                        <span>
+                                            Kamar Baru Terpilih: <strong>Kamar {pindahSelectedRoomObj.nomor_kamar}</strong> (Lantai {pindahSelectedRoomObj.lantai}) &bull; {pindahSelectedRoomObj.gedung?.nama_gedung}
+                                        </span>
+                                    </div>
+                                    <div className="font-semibold text-purple-700 bg-white px-2.5 py-0.5 rounded-lg border border-purple-200 shadow-xs">
+                                        Rp {Number(pindahSelectedRoomObj.harga_bulanan).toLocaleString('id-ID')} / bulan
+                                    </div>
+                                </div>
+                            ) : (
+                                <p className="text-[11px] text-slate-400 italic">
+                                    Silakan pilih gedung, lantai, dan kamar tujuan baru yang kosong.
+                                </p>
+                            )}
+                        </div>
+                    </form>
+                </Modal>
+            )}
+
+            {/* KIRIM PERINGATAN MODAL */}
+            {peringatanTarget && (
+                <Modal
+                    isOpen={peringatanModalOpen}
+                    onClose={() => setPeringatanModalOpen(false)}
+                    title={`Kirim Surat Peringatan — ${peringatanTarget.user?.nama || peringatanTarget.user?.name}`}
+                    maxWidth="max-w-md"
+                    footer={
+                        <div className="flex items-center justify-end gap-2 w-full">
+                            <button
+                                type="button"
+                                onClick={() => setPeringatanModalOpen(false)}
+                                className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-xl"
+                            >
+                                Batal
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handlePeringatanSubmit}
+                                disabled={submittingPeringatan || !peringatanForm.keterangan.trim()}
+                                className="px-4 py-2 text-sm font-semibold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50 rounded-xl shadow-sm transition"
+                            >
+                                {submittingPeringatan ? 'Mengirim...' : 'Kirim Peringatan Resmi'}
+                            </button>
+                        </div>
+                    }
+                >
+                    <form onSubmit={handlePeringatanSubmit} className="space-y-4">
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-700 mb-1">Jenis Peringatan *</label>
+                                <select
+                                    value={peringatanForm.jenis}
+                                    onChange={(e) => setPeringatanForm({ ...peringatanForm, jenis: e.target.value })}
+                                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl bg-white"
+                                >
+                                    <option value="nunggak">Tunggakan Pembayaran</option>
+                                    <option value="pelanggaran">Pelanggaran Tata Tertib</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-700 mb-1">Tanggal Kejadian</label>
+                                <input
+                                    type="date"
+                                    required
+                                    value={peringatanForm.tanggal_kejadian}
+                                    onChange={(e) => setPeringatanForm({ ...peringatanForm, tanggal_kejadian: e.target.value })}
+                                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl"
+                                />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">Kategori Pelanggaran *</label>
+                            <input
+                                type="text"
+                                required
+                                value={peringatanForm.kategori_pelanggaran}
+                                onChange={(e) => setPeringatanForm({ ...peringatanForm, kategori_pelanggaran: e.target.value })}
+                                placeholder="Contoh: Keterlambatan Pembayaran / Lewat Jam Malam / Kebisingan"
+                                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">Keterangan & Teguran *</label>
+                            <textarea
+                                rows={3}
+                                required
+                                value={peringatanForm.keterangan}
+                                onChange={(e) => setPeringatanForm({ ...peringatanForm, keterangan: e.target.value })}
+                                placeholder="Tuliskan isi teguran resmi yang akan dikirimkan ke akun penghuni..."
+                                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl"
+                            />
+                        </div>
+                    </form>
+                </Modal>
+            )}
 
             {/* DETAIL, FASILITAS REQ & PRINT KARTU MODAL */}
             {selectedPenghuni && (
                 <Modal
                     isOpen={detailModalOpen}
                     onClose={() => setDetailModalOpen(false)}
-                    title={`Profil, Fasilitas & Kartu Penghuni — ${selectedPenghuni.user?.nama || selectedPenghuni.user?.name}`}
+                    title={`Profil & Kartu Penghuni — ${selectedPenghuni.user?.nama || selectedPenghuni.user?.name}`}
                     maxWidth="max-w-2xl"
                     footer={
                         <div className="flex items-center justify-between w-full">
@@ -588,21 +1446,43 @@ export default function Penghuni() {
 
                             <div className="flex items-center gap-2">
                                 {selectedPenghuni.status === 'aktif' && (
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            setCheckoutTarget(selectedPenghuni);
-                                            setCheckoutDialogOpen(true);
-                                        }}
-                                        className="px-4 py-2 text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl cursor-pointer"
-                                    >
-                                        Proses Checkout
-                                    </button>
+                                    <>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setDetailModalOpen(false);
+                                                handleOpenPerpanjang(selectedPenghuni);
+                                            }}
+                                            className="px-3.5 py-2 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-xl"
+                                        >
+                                            Perpanjang
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setDetailModalOpen(false);
+                                                handleOpenPindahKamar(selectedPenghuni);
+                                            }}
+                                            className="px-3.5 py-2 text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-xl"
+                                        >
+                                            Pindah Kamar
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setCheckoutTarget(selectedPenghuni);
+                                                setCheckoutDialogOpen(true);
+                                            }}
+                                            className="px-3.5 py-2 text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl"
+                                        >
+                                            Checkout
+                                        </button>
+                                    </>
                                 )}
                                 <button
                                     type="button"
                                     onClick={() => setDetailModalOpen(false)}
-                                    className="px-4 py-2 text-xs font-semibold text-white bg-[#263b53] hover:bg-[#1b2c3f] rounded-xl cursor-pointer"
+                                    className="px-4 py-2 text-xs font-semibold text-white bg-[#1E5FC9] hover:bg-blue-700 rounded-xl"
                                 >
                                     Tutup
                                 </button>
@@ -612,7 +1492,7 @@ export default function Penghuni() {
                 >
                     <div className="space-y-5" id="printable-tenant-card">
                         {/* Printable ID Card Mockup */}
-                        <div className="p-5 rounded-2xl bg-gradient-to-br from-[#263b53] to-[#0D3880] text-white shadow-md relative overflow-hidden">
+                        <div className="p-5 rounded-2xl bg-gradient-to-br from-[#1E5FC9] to-[#0D3880] text-white shadow-md relative overflow-hidden">
                             <div className="flex items-center justify-between border-b border-white/20 pb-3 mb-4">
                                 <div className="flex items-center gap-2">
                                     <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center font-bold text-white text-sm">
@@ -676,18 +1556,17 @@ export default function Penghuni() {
                             </div>
                         </div>
 
-                        {/* SECTION DROPDOWN REQUEST FASILITAS PENGHUNI */}
+                        {/* Request & Fasilitas Kamar */}
                         <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
                             <div className="flex items-center justify-between">
-                                <h4 className="text-xs font-bold text-[#263b53] uppercase tracking-wider">
-                                    🛋️ Request & Fasilitas Kamar Penghuni
+                                <h4 className="text-xs font-bold text-[#1E5FC9] uppercase tracking-wider">
+                                    🛋️ Request Fasilitas Tambahan Kamar
                                 </h4>
                                 <span className="text-[11px] text-slate-500">
                                     Kamar {selectedPenghuni.kamar?.nomor_kamar}
                                 </span>
                             </div>
 
-                            {/* Daftar Fasilitas yang sudah di-request / terpasang di kamar ini */}
                             {(selectedPenghuni.kamar?.kamar_fasilitas || []).length === 0 ? (
                                 <p className="text-xs text-slate-400 italic">
                                     Belum ada request fasilitas tambahan untuk kamar penghuni ini.
@@ -715,18 +1594,14 @@ export default function Penghuni() {
                                                     <>
                                                         <button
                                                             type="button"
-                                                            onClick={() =>
-                                                                handleUpdatePermintaanStatus(kf.id, 'aktif')
-                                                            }
+                                                            onClick={() => handleUpdatePermintaanStatus(kf.id, 'aktif')}
                                                             className="px-2 py-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg cursor-pointer"
                                                         >
                                                             Setujui
                                                         </button>
                                                         <button
                                                             type="button"
-                                                            onClick={() =>
-                                                                handleUpdatePermintaanStatus(kf.id, 'ditolak')
-                                                            }
+                                                            onClick={() => handleUpdatePermintaanStatus(kf.id, 'ditolak')}
                                                             className="px-2 py-1 text-[11px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg cursor-pointer"
                                                         >
                                                             Tolak
@@ -739,40 +1614,25 @@ export default function Penghuni() {
                                 </div>
                             )}
 
-                            {/* Form Dropdown Tambah Request Fasilitas */}
-                            <form
-                                onSubmit={handleAddFasilitasFromDetail}
-                                className="pt-2 border-t border-slate-200 flex flex-col sm:flex-row gap-2"
-                            >
+                            <form onSubmit={handleAddFasilitasFromDetail} className="pt-2 border-t border-slate-200 flex flex-col sm:flex-row gap-2">
                                 <select
                                     value={detailFasilitasId}
                                     onChange={(e) => setDetailFasilitasId(e.target.value)}
                                     className="flex-1 px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white text-slate-700"
                                 >
-                                    <option value="">-- Pilih Request Fasilitas Tambahan --</option>
+                                    <option value="">+ Tambah Fasilitas Tambahan...</option>
                                     {fasilitasList.map((f) => (
                                         <option key={f.id} value={f.id}>
-                                            {f.nama_fasilitas} ({f.tipe}) — +Rp{' '}
-                                            {Number(f.biaya_tambahan || 0).toLocaleString('id-ID')}/bln
+                                            {f.nama_fasilitas} (+Rp {Number(f.biaya_tambahan).toLocaleString('id-ID')})
                                         </option>
                                     ))}
                                 </select>
-
-                                <select
-                                    value={detailStatusReq}
-                                    onChange={(e) => setDetailStatusReq(e.target.value)}
-                                    className="px-3 py-2 text-xs border border-slate-300 rounded-xl bg-white text-slate-700"
-                                >
-                                    <option value="menunggu_konfirmasi">Status: Request (Menunggu)</option>
-                                    <option value="aktif">Status: Langsung Aktif</option>
-                                </select>
-
                                 <button
                                     type="submit"
                                     disabled={submittingDetailFasilitas || !detailFasilitasId}
-                                    className="px-4 py-2 text-xs font-semibold text-white bg-[#263b53] hover:bg-[#1b2c3f] disabled:opacity-50 rounded-xl transition shrink-0 cursor-pointer"
+                                    className="px-4 py-2 text-xs font-semibold text-white bg-[#1E5FC9] hover:bg-blue-700 disabled:opacity-50 rounded-xl transition"
                                 >
-                                    + Tambah Fasilitas
+                                    Tambah
                                 </button>
                             </form>
                         </div>
@@ -780,11 +1640,11 @@ export default function Penghuni() {
                 </Modal>
             )}
 
-            {/* ADD TENANT MODAL (WITH DROPDOWN REQUEST FASILITAS) */}
+            {/* ADD TENANT MODAL */}
             <Modal
                 isOpen={addModalOpen}
                 onClose={() => setAddModalOpen(false)}
-                title="Daftarkan Penghuni Baru"
+                title="Tambah Penghuni Baru"
                 maxWidth="max-w-xl"
             >
                 <form onSubmit={handleAddSubmit} className="space-y-4">
@@ -796,7 +1656,6 @@ export default function Penghuni() {
                                 required
                                 value={form.name}
                                 onChange={(e) => setForm({ ...form, name: e.target.value })}
-                                placeholder="Nama lengkap penghuni"
                                 className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl"
                             />
                         </div>
@@ -807,115 +1666,123 @@ export default function Penghuni() {
                                 required
                                 value={form.email}
                                 onChange={(e) => setForm({ ...form, email: e.target.value })}
-                                placeholder="email@contoh.com"
                                 className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl"
                             />
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
-                        <div>
-                            <label className="block text-xs font-semibold text-slate-700 mb-1">
-                                Nomor HP / WhatsApp *
-                            </label>
-                            <input
-                                type="text"
-                                required
-                                value={form.no_hp}
-                                onChange={(e) => setForm({ ...form, no_hp: e.target.value })}
-                                placeholder="08123456789"
-                                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-semibold text-slate-700 mb-1">Nomor KTP / NIK</label>
-                            <input
-                                type="text"
-                                value={form.no_ktp}
-                                onChange={(e) => setForm({ ...form, no_ktp: e.target.value })}
-                                placeholder="3271XXXXXXXXXXXX"
-                                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl"
-                            />
-                        </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">No. WhatsApp / HP</label>
+                        <input
+                            type="text"
+                            value={form.no_hp}
+                            onChange={(e) => setForm({ ...form, no_hp: e.target.value })}
+                            placeholder="Contoh: 081234567890"
+                            className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl"
+                        />
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                            <label className="block text-xs font-semibold text-slate-700 mb-1">
-                                Pilih Kamar Kosong *
-                            </label>
-                            <select
-                                required
-                                value={form.kamar_id}
-                                onChange={(e) => setForm({ ...form, kamar_id: e.target.value })}
-                                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl bg-white"
-                            >
-                                <option value="">Pilih Kamar Kosong</option>
-                                {emptyRooms.map((rm) => (
-                                    <option key={rm.id} value={rm.id}>
-                                        Kamar {rm.nomor_kamar} (Lt. {rm.lantai}) - {rm.gedung?.nama_gedung} - Rp{' '}
-                                        {Number(rm.harga_bulanan).toLocaleString('id-ID')}/bln
-                                    </option>
-                                ))}
-                            </select>
+                    {/* Cascading Room Selection: Gedung -> Lantai -> Kamar Kosong */}
+                    <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                        <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                                <svg className="w-4 h-4 text-[#1E5FC9]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                                </svg>
+                                Pemilihan Unit Kamar
+                            </span>
+                            <span className="text-[11px] text-slate-500 font-medium">
+                                Step: Gedung &rarr; Lantai &rarr; Kamar
+                            </span>
                         </div>
 
-                        {/* DROPDOWN REQUEST FASILITAS & INPUT KUSTOM */}
-                        <div>
-                            <label className="block text-xs font-semibold text-slate-700 mb-1">
-                                Request Fasilitas Kost <span className="text-slate-400 font-normal">(Opsional - Bisa Dikosongkan)</span>
-                            </label>
-                            <select
-                                value={form.fasilitas_id}
-                                onChange={(e) => setForm({ ...form, fasilitas_id: e.target.value })}
-                                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl bg-white"
-                            >
-                                <option value="">-- Tidak Ada / Kosongkan --</option>
-                                {fasilitasList.map((f) => (
-                                     <option key={f.id} value={f.id}>
-                                         {f.nama_fasilitas}{' '}
-                                         {Number(f.biaya_tambahan) > 0
-                                             ? `(+Rp ${Number(f.biaya_tambahan).toLocaleString('id-ID')}/bln)`
-                                             : '(Gratis/Default)'}
-                                     </option>
-                                ))}
-                            </select>
-
-                            {/* Opsi Input Manual / Fasilitas Kustom */}
-                            <div className="mt-2">
-                                <label className="block text-[11px] font-medium text-slate-600 mb-1">
-                                    Atau Ketik Fasilitas Kustom / Manual:
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                            {/* Step 1: Gedung */}
+                            <div>
+                                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                                    1. Pilih Gedung *
                                 </label>
-                                <input
-                                    type="text"
-                                    placeholder="Contoh: Kulkas mini, Smart TV, Meja belajar..."
-                                    value={form.fasilitas_custom || ''}
-                                    onChange={(e) => setForm({ ...form, fasilitas_custom: e.target.value })}
-                                    className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-xl bg-white focus:outline-none focus:ring-1 focus:ring-[#263b53]"
-                                />
+                                <select
+                                    required
+                                    value={addGedungId}
+                                    onChange={handleAddGedungChange}
+                                    className="w-full px-2.5 py-2 text-xs font-medium border border-slate-300 rounded-xl bg-white text-slate-800 focus:ring-2 focus:ring-blue-100 focus:border-[#1E5FC9]"
+                                >
+                                    <option value="">-- Pilih Gedung --</option>
+                                    {addAvailableGedungs.map((g) => (
+                                        <option key={g.id} value={g.id}>
+                                            {g.nama} {g.cabang ? `(${g.cabang})` : ''}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Step 2: Lantai */}
+                            <div>
+                                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                                    2. Pilih Lantai *
+                                </label>
+                                <select
+                                    required
+                                    disabled={!addGedungId || addAvailableLantais.length === 0}
+                                    value={addLantai}
+                                    onChange={handleAddLantaiChange}
+                                    className="w-full px-2.5 py-2 text-xs font-medium border border-slate-300 rounded-xl bg-white text-slate-800 disabled:bg-slate-100 disabled:text-slate-400 focus:ring-2 focus:ring-blue-100 focus:border-[#1E5FC9]"
+                                >
+                                    <option value="">{addGedungId ? '-- Pilih Lantai --' : 'Pilih Gedung dulu'}</option>
+                                    {addAvailableLantais.map((lt) => (
+                                        <option key={lt} value={lt}>
+                                            Lantai {lt}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Step 3: Kamar Kosong */}
+                            <div>
+                                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                                    3. Pilih Kamar Kosong *
+                                </label>
+                                <select
+                                    required
+                                    disabled={!addLantai || addFilteredRooms.length === 0}
+                                    value={form.kamar_id}
+                                    onChange={(e) => setForm({ ...form, kamar_id: e.target.value })}
+                                    className="w-full px-2.5 py-2 text-xs font-medium border border-slate-300 rounded-xl bg-white text-slate-800 disabled:bg-slate-100 disabled:text-slate-400 focus:ring-2 focus:ring-blue-100 focus:border-[#1E5FC9]"
+                                >
+                                    <option value="">{addLantai ? (addFilteredRooms.length > 0 ? '-- Pilih Kamar --' : 'Tidak ada kamar') : 'Pilih Lantai dulu'}</option>
+                                    {addFilteredRooms.map((r) => (
+                                        <option key={r.id} value={r.id}>
+                                            Kamar {r.nomor_kamar} (Rp {Number(r.harga_bulanan).toLocaleString('id-ID')})
+                                        </option>
+                                    ))}
+                                </select>
                             </div>
                         </div>
-                    </div>
 
-                    {(form.fasilitas_id || (form.fasilitas_custom && form.fasilitas_custom.trim())) && (
-                        <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl flex items-center justify-between text-xs">
-                            <span className="font-semibold text-[#263b53]">
-                                Status Pemasangan Fasilitas yang Dipilih:
-                            </span>
-                            <select
-                                value={form.status_request}
-                                onChange={(e) => setForm({ ...form, status_request: e.target.value })}
-                                className="px-2.5 py-1 border border-slate-300 rounded-lg bg-white font-semibold text-[#263b53]"
-                            >
-                                <option value="menunggu_konfirmasi">Menunggu Konfirmasi (Request)</option>
-                                <option value="aktif">Langsung Aktif / Terpasang</option>
-                            </select>
-                        </div>
-                    )}
+                        {/* Selected Room Badge / Status */}
+                        {addSelectedRoomObj ? (
+                            <div className="p-2.5 bg-blue-50/80 border border-blue-200 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs text-blue-950">
+                                <div className="flex items-center gap-2">
+                                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                    <span>
+                                        Unit Terpilih: <strong>Kamar {addSelectedRoomObj.nomor_kamar}</strong> (Lantai {addSelectedRoomObj.lantai}) &bull; {addSelectedRoomObj.gedung?.nama_gedung}
+                                    </span>
+                                </div>
+                                <div className="font-semibold text-emerald-700 bg-white px-2.5 py-0.5 rounded-lg border border-emerald-200 shadow-xs">
+                                    Rp {Number(addSelectedRoomObj.harga_bulanan).toLocaleString('id-ID')} / bulan
+                                </div>
+                            </div>
+                        ) : (
+                            <p className="text-[11px] text-slate-400 italic">
+                                Silakan pilih gedung, lalu lantai, kemudian kamar kosong yang diinginkan.
+                            </p>
+                        )}
+                    </div>
 
                     <div className="grid grid-cols-2 gap-3">
                         <div>
-                            <label className="block text-xs font-semibold text-slate-700 mb-1">Tanggal Masuk *</label>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">Tanggal Masuk (Check-In) *</label>
                             <input
                                 type="date"
                                 required
@@ -923,180 +1790,90 @@ export default function Penghuni() {
                                 onChange={(e) => setForm({ ...form, tanggal_masuk: e.target.value })}
                                 className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl"
                             />
+                            <p className="text-[11px] text-slate-500 mt-1">
+                                💡 Bisa pilih hari ini atau tanggal lebih awal jika sudah mulai tinggal duluan.
+                            </p>
                         </div>
                         <div>
-                            <label className="block text-xs font-semibold text-slate-700 mb-1">
-                                Masa Tinggal Sampai
-                            </label>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">Masa Tinggal Sampai</label>
                             <input
                                 type="date"
                                 value={form.masa_tinggal_sampai}
                                 onChange={(e) => setForm({ ...form, masa_tinggal_sampai: e.target.value })}
                                 className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl"
                             />
+                            <p className="text-[11px] text-slate-400 mt-1">
+                                Opsional. Kosongkan jika belum ada batas akhir sewa.
+                            </p>
                         </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                        <div>
-                            <label className="block text-xs font-semibold text-slate-700 mb-1">
-                                Nama Kontak Darurat
-                            </label>
-                            <input
-                                type="text"
-                                value={form.kontak_darurat_nama}
-                                onChange={(e) => setForm({ ...form, kontak_darurat_nama: e.target.value })}
-                                placeholder="Nama orang tua / wali"
-                                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-semibold text-slate-700 mb-1">
-                                No HP Kontak Darurat
-                            </label>
-                            <input
-                                type="text"
-                                value={form.kontak_darurat_hp}
-                                onChange={(e) => setForm({ ...form, kontak_darurat_hp: e.target.value })}
-                                placeholder="08XXXXXXXXXX"
-                                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl"
-                            />
-                        </div>
-                    </div>
-
-                    <div>
-                        <label className="block text-xs font-semibold text-slate-700 mb-1">Alamat Asal</label>
-                        <textarea
-                            rows={2}
-                            value={form.alamat_asal}
-                            onChange={(e) => setForm({ ...form, alamat_asal: e.target.value })}
-                            placeholder="Alamat domisili asal..."
-                            className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl"
-                        />
                     </div>
 
                     <div className="flex justify-end gap-2 pt-2">
                         <button
                             type="button"
                             onClick={() => setAddModalOpen(false)}
-                            className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                            className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-xl"
                         >
                             Batal
                         </button>
                         <button
                             type="submit"
                             disabled={submittingAdd}
-                            className="px-4 py-2 text-sm font-semibold text-white bg-[#263b53] hover:bg-[#1b2c3f] rounded-xl shadow-sm cursor-pointer"
+                            className="px-4 py-2 text-sm font-semibold text-white bg-[#1E5FC9] hover:bg-blue-700 rounded-xl shadow-sm"
                         >
-                            {submittingAdd ? 'Mendaftarkan...' : 'Daftarkan Penghuni'}
+                            {submittingAdd ? 'Menyimpan...' : 'Simpan Penghuni'}
                         </button>
                     </div>
                 </form>
             </Modal>
 
-            {/* IMPORT GOOGLE FORM (CSV) MODAL */}
+            {/* IMPORT CSV MODAL */}
             <Modal
                 isOpen={importModalOpen}
                 onClose={() => setImportModalOpen(false)}
-                title="Import Data Pendaftaran Penghuni dari Google Form (CSV)"
-                maxWidth="max-w-3xl"
+                title="Import Pendaftaran dari Google Form (CSV)"
+                maxWidth="max-w-2xl"
             >
-                <form onSubmit={handleImportSubmit} className="space-y-4">
-                    <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 leading-relaxed">
-                        Unggah file <strong>.csv</strong> hasil unduhan Google Sheets / Google Form atau tempelkan baris
-                        CSV dengan urutan kolom: <strong>Nama, Email, No HP, No KTP, Alamat Asal</strong>. Anda juga
-                        dapat memilih Kamar dan Request Fasilitas untuk setiap penghuni sebelum mengimpor.
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                            <label className="block text-xs font-semibold text-slate-700 mb-1">
-                                Upload File CSV Google Form
-                            </label>
-                            <input
-                                type="file"
-                                accept=".csv,.txt"
-                                onChange={handleCsvFileChange}
-                                className="w-full text-xs border border-slate-300 rounded-xl p-2 bg-white"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-semibold text-slate-700 mb-1">
-                                Atau Tempel Teks CSV Langsung
-                            </label>
-                            <textarea
-                                rows={2}
-                                value={csvRaw}
-                                onChange={(e) => parseGoogleFormCsv(e.target.value)}
-                                placeholder="Budi Santoso, budi@gmail.com, 08123456789, 32710001, Jl. Merdeka 10"
-                                className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-xl"
-                            />
-                        </div>
-                    </div>
+                <div className="space-y-4">
+                    <p className="text-xs text-slate-600">
+                        Salin (copy-paste) isi teks CSV dari Google Form atau Spreadsheet pendaftaran Anda ke dalam kotak di bawah ini.
+                    </p>
+                    <textarea
+                        rows={5}
+                        placeholder="Timestamp,Nama Lengkap,Email,No HP,No KTP,Alamat Asal,Tanggal Masuk,Fasilitas Tambahan..."
+                        value={csvRaw}
+                        onChange={(e) => handleCsvTextChange(e.target.value)}
+                        className="w-full p-3 font-mono text-xs border border-slate-300 rounded-xl"
+                    />
 
                     {importRows.length > 0 && (
-                        <div className="border border-slate-200 rounded-xl overflow-x-auto max-h-64">
-                            <table className="w-full text-left border-collapse text-xs">
-                                <thead>
-                                    <tr className="bg-slate-100 text-slate-600 border-b border-slate-200">
-                                        <th className="py-2 px-3">Nama & Email</th>
-                                        <th className="py-2 px-3">No HP / KTP</th>
-                                        <th className="py-2 px-3">Pilih Kamar *</th>
-                                        <th className="py-2 px-3">Request Fasilitas</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {importRows.map((r, idx) => (
-                                        <tr key={idx}>
-                                            <td className="py-2 px-3">
-                                                <div className="font-semibold text-slate-800">{r.nama}</div>
-                                                <div className="text-slate-500">{r.email}</div>
-                                            </td>
-                                            <td className="py-2 px-3">
-                                                <div>{r.no_hp || '-'}</div>
-                                                <div className="text-slate-400">{r.no_ktp || '-'}</div>
-                                            </td>
-                                            <td className="py-2 px-3">
-                                                <select
-                                                    required
-                                                    value={r.kamar_id}
-                                                    onChange={(e) => {
-                                                        const next = [...importRows];
-                                                        next[idx].kamar_id = e.target.value;
-                                                        setImportRows(next);
-                                                    }}
-                                                    className="px-2 py-1 border border-slate-300 rounded-lg bg-white text-xs"
-                                                >
-                                                    <option value="">Pilih Kamar</option>
-                                                    {emptyRooms.map((rm) => (
-                                                        <option key={rm.id} value={rm.id}>
-                                                            Kamar {rm.nomor_kamar} ({rm.gedung?.nama_gedung})
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </td>
-                                            <td className="py-2 px-3">
-                                                <select
-                                                    value={r.fasilitas_id || ''}
-                                                    onChange={(e) => {
-                                                        const next = [...importRows];
-                                                        next[idx].fasilitas_id = e.target.value;
-                                                        setImportRows(next);
-                                                    }}
-                                                    className="px-2 py-1 border border-slate-300 rounded-lg bg-white text-xs"
-                                                >
-                                                    <option value="">-- Tanpa Req --</option>
-                                                    {fasilitasList.map((f) => (
-                                                        <option key={f.id} value={f.id}>
-                                                            {f.nama_fasilitas}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                        <div className="border border-slate-200 rounded-xl p-3 max-h-56 overflow-y-auto space-y-2">
+                            <span className="text-xs font-bold text-slate-700 block">
+                                Terdeteksi {importRows.length} calon penghuni:
+                            </span>
+                            {importRows.map((row, idx) => (
+                                <div key={idx} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg text-xs">
+                                    <div>
+                                        <strong>{row.nama}</strong> ({row.email})
+                                    </div>
+                                    <select
+                                        value={row.kamar_id}
+                                        onChange={(e) => {
+                                            const updated = [...importRows];
+                                            updated[idx].kamar_id = e.target.value;
+                                            setImportRows(updated);
+                                        }}
+                                        className="px-2 py-1 text-xs border border-slate-300 rounded bg-white"
+                                    >
+                                        <option value="">Pilih Kamar</option>
+                                        {emptyRooms.map((rm) => (
+                                            <option key={rm.id} value={rm.id}>
+                                                Kamar {rm.nomor_kamar} ({rm.gedung?.nama_gedung})
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            ))}
                         </div>
                     )}
 
@@ -1104,19 +1881,20 @@ export default function Penghuni() {
                         <button
                             type="button"
                             onClick={() => setImportModalOpen(false)}
-                            className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                            className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-xl"
                         >
                             Batal
                         </button>
                         <button
-                            type="submit"
+                            type="button"
+                            onClick={handleImportSubmit}
                             disabled={submittingImport || importRows.length === 0}
-                            className="px-4 py-2 text-xs font-semibold text-white bg-[#263b53] hover:bg-[#1b2c3f] disabled:opacity-50 rounded-xl shadow-sm cursor-pointer"
+                            className="px-4 py-2 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 rounded-xl shadow-sm"
                         >
                             {submittingImport ? 'Mengimpor...' : `Impor ${importRows.length} Penghuni`}
                         </button>
                     </div>
-                </form>
+                </div>
             </Modal>
 
             {/* CHECKOUT CONFIRM DIALOG */}
@@ -1125,8 +1903,8 @@ export default function Penghuni() {
                 onClose={() => setCheckoutDialogOpen(false)}
                 onConfirm={handleConfirmCheckout}
                 title="Konfirmasi Check-Out Penghuni"
-                message={`Apakah Anda yakin ingin melakukan check-out untuk ${checkoutTarget?.user?.nama || checkoutTarget?.user?.name}? Kamar ${checkoutTarget?.kamar?.nomor_kamar} akan otomatis dikembalikan ke status 'kosong' dan status penghuni diubah ke nonaktif.`}
-                confirmText="Ya, Check-Out"
+                message={`Apakah Anda yakin ingin memproses check-out untuk ${checkoutTarget?.user?.nama || checkoutTarget?.user?.name}? Kamar ${checkoutTarget?.kamar?.nomor_kamar} akan otomatis dikembalikan menjadi KOSONG dan tersedia untuk booking kembali.`}
+                confirmText="Ya, Selesaikan Check-Out"
                 cancelText="Batal"
                 type="danger"
                 loading={submittingCheckout}

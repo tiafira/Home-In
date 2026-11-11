@@ -293,7 +293,7 @@ export default function Dashboard() {
                                     </thead>
                                     <tbody className="divide-y divide-slate-50 text-sm">
                                         {bookingList.map((b) => {
-                                            const canProcess = ['menunggu_pembayaran', 'menunggu_persetujuan'].includes(b.status);
+                                            const canProcess = ['menunggu_konfirmasi', 'menunggu_persetujuan'].includes(b.status);
                                             const isRoomFull = b.kamar && b.kamar.status !== 'kosong';
                                             return (
                                                 <tr key={b.id} className="hover:bg-slate-50/70 transition">
@@ -391,6 +391,66 @@ export default function Dashboard() {
                     {/* Section 2: Komplain Terbaru (Full Width) */}
                     <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm">
                         <ComplaintTable complaints={dashboardData?.komplain_terbaru} loading={loading} />
+                    </div>
+
+                    {/* Section 3: Aktivitas Terbaru (Full Width) */}
+                    <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+                            <div className="flex items-center gap-2.5">
+                                <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center">
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h2 className="text-base sm:text-lg font-bold text-[#263b53]">
+                                        Aktivitas Terbaru
+                                    </h2>
+                                    <p className="text-xs text-[#64748b]">
+                                        Catatan audit log dan aktivitas operasional sistem secara real-time.
+                                    </p>
+                                </div>
+                            </div>
+                            <Link
+                                to="/admin/activity-logs"
+                                className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
+                            >
+                                <span>Lihat Semua Log Aktivitas</span>
+                                <span>&rarr;</span>
+                            </Link>
+                        </div>
+
+                        {loading ? (
+                            <div className="py-8 text-center text-xs text-slate-400">Memuat log aktivitas...</div>
+                        ) : (!dashboardData?.aktivitas_terbaru || dashboardData.aktivitas_terbaru.length === 0) ? (
+                            <div className="py-8 text-center text-xs text-slate-400">Belum ada aktivitas terbaru yang tercatat.</div>
+                        ) : (
+                            <div className="divide-y divide-slate-100">
+                                {dashboardData.aktivitas_terbaru.map((log) => (
+                                    <div key={log.id} className="py-3 flex items-start justify-between gap-4">
+                                        <div className="flex items-start gap-3">
+                                            <div className="w-7 h-7 rounded-lg bg-slate-100 text-[#263b53] font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
+                                                {log.user_nama ? log.user_nama.charAt(0).toUpperCase() : 'A'}
+                                            </div>
+                                            <div>
+                                                <div className="text-xs font-semibold text-slate-900">
+                                                    <span className="font-bold text-[#263b53]">{log.user_nama}</span>{' '}
+                                                    <span className="text-slate-600 font-normal">{log.keterangan || log.aksi}</span>
+                                                </div>
+                                                <div className="flex items-center gap-2 mt-1">
+                                                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600 uppercase">
+                                                        {log.aksi ? log.aksi.replace(/_/g, ' ') : 'AKTIVITAS'}
+                                                    </span>
+                                                    <span className="text-[11px] text-slate-400">
+                                                        {log.created_at}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

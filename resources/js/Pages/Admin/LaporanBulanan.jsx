@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import AdminLayout from '../../Layouts/AdminLayout';
+import { exportToExcel, exportToCsv } from '../../utils/exportExcel';
 import { useToast } from '../../context/ToastContext';
 import { useBranch } from '../../context/BranchContext';
 import api from '../../services/api';
@@ -47,6 +48,41 @@ export default function LaporanBulanan() {
         window.print();
     };
 
+    const handleExportExcel = () => {
+        const headers = ['Bulan', 'Tahun', 'Pemasukan Sewa (Rp)', 'Estimasi Operasional 35% (Rp)', 'Estimasi Laba Bersih (Rp)'];
+        const rows = chartData.map((d) => [
+            d.bulan,
+            selectedYear,
+            Number(d.pemasukan || 0).toLocaleString('id-ID'),
+            Number((d.pemasukan || 0) * 0.35).toLocaleString('id-ID'),
+            Number((d.pemasukan || 0) * 0.65).toLocaleString('id-ID'),
+        ]);
+        exportToExcel({
+            filename: `rekap-keuangan-bulanan-${selectedYear}.xls`,
+            title: `Rekapitulasi Keuangan Bulanan Tahun ${selectedYear}`,
+            headers,
+            rows,
+        });
+        toast.success('Rekap bulanan berhasil diekspor ke Excel!');
+    };
+
+    const handleExportCsv = () => {
+        const headers = ['Bulan', 'Tahun', 'Pemasukan Sewa (Rp)', 'Estimasi Operasional 35% (Rp)', 'Estimasi Laba Bersih (Rp)'];
+        const rows = chartData.map((d) => [
+            d.bulan,
+            selectedYear,
+            d.pemasukan || 0,
+            (d.pemasukan || 0) * 0.35,
+            (d.pemasukan || 0) * 0.65,
+        ]);
+        exportToCsv({
+            filename: `rekap-keuangan-bulanan-${selectedYear}.csv`,
+            headers,
+            rows,
+        });
+        toast.success('Rekap bulanan berhasil diekspor ke CSV!');
+    };
+
     return (
         <AdminLayout
             title="Laporan Bulanan & Keuangan"
@@ -69,13 +105,29 @@ export default function LaporanBulanan() {
                     </select>
                 </div>
 
-                <button
-                    type="button"
-                    onClick={handlePrint}
-                    className="px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 rounded-xl transition flex items-center gap-2 self-start sm:self-auto"
-                >
-                    🖨️ Cetak / Print Rekapitulasi
-                </button>
+                <div className="flex items-center gap-2 self-start sm:self-auto">
+                    <button
+                        type="button"
+                        onClick={handleExportExcel}
+                        className="px-3.5 py-2 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                        <span>📊 Export Excel</span>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleExportCsv}
+                        className="px-3.5 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                        <span>📑 Export CSV</span>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handlePrint}
+                        className="px-3.5 py-2 text-xs font-bold text-[#1F2A44] bg-white border border-slate-200 hover:bg-slate-50 rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                        <span>🖨️ Cetak / Print Rekapitulasi</span>
+                    </button>
+                </div>
             </div>
 
             {/* 3 Summary Financial Cards */}

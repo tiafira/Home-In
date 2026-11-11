@@ -21,7 +21,6 @@ export default function Pegawai() {
         name: '',
         email: '',
         no_hp: '',
-        cabang_id: '',
         jabatan: 'penjaga',
         no_ktp: '',
         alamat: '',
@@ -59,7 +58,6 @@ export default function Pegawai() {
             name: '',
             email: '',
             no_hp: '',
-            cabang_id: activeBranchId || branches[0]?.id || '',
             jabatan: 'penjaga',
             no_ktp: '',
             alamat: '',
@@ -75,7 +73,6 @@ export default function Pegawai() {
             name: p.user?.name || '',
             email: p.user?.email || '',
             no_hp: p.user?.no_hp || '',
-            cabang_id: p.cabang_id,
             jabatan: p.jabatan,
             no_ktp: p.no_ktp || '',
             alamat: p.alamat || '',
@@ -148,12 +145,6 @@ export default function Pegawai() {
             ),
         },
         {
-            key: 'cabang',
-            label: 'Penempatan Cabang',
-            className: 'whitespace-nowrap text-xs font-medium text-slate-700',
-            render: (row) => row.cabang?.nama_cabang || 'Semua Cabang',
-        },
-        {
             key: 'tanggal_masuk_kerja',
             label: 'Tgl Bergabung',
             className: 'whitespace-nowrap text-xs text-slate-500',
@@ -210,7 +201,7 @@ export default function Pegawai() {
                     loading={loading}
                     searchPlaceholder="Cari nama pegawai, email, jabatan..."
                     emptyTitle="Tidak ada data pegawai"
-                    emptyDescription="Belum ada pegawai terdaftar di cabang ini."
+                    emptyDescription="Belum ada data pegawai terdaftar."
                 />
             </div>
 
@@ -267,34 +258,16 @@ export default function Pegawai() {
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
-                        <div>
-                            <label className="block text-xs font-semibold text-slate-700 mb-1">Penempatan Cabang *</label>
-                            <select
-                                required
-                                value={form.cabang_id}
-                                onChange={(e) => setForm({ ...form, cabang_id: e.target.value })}
-                                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl bg-white"
-                            >
-                                <option value="">Pilih Cabang</option>
-                                {branches.map((b) => (
-                                    <option key={b.id} value={b.id}>
-                                        {b.nama_cabang}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block text-xs font-semibold text-slate-700 mb-1">Jabatan *</label>
-                            <select
-                                value={form.jabatan}
-                                onChange={(e) => setForm({ ...form, jabatan: e.target.value })}
-                                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl bg-white"
-                            >
-                                <option value="penjaga">Penjaga Kost</option>
-                                <option value="admin">Administrator</option>
-                            </select>
-                        </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">Jabatan / Role *</label>
+                        <select
+                            value={form.jabatan}
+                            onChange={(e) => setForm({ ...form, jabatan: e.target.value })}
+                            className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl bg-white"
+                        >
+                            <option value="penjaga">Penjaga Kost</option>
+                            <option value="admin">Administrator</option>
+                        </select>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">

@@ -3,6 +3,10 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\ActivityLog;
+use App\Models\Notifikasi;
+use App\Models\Pegawai;
+use App\Models\Penghuni;
 use App\Models\Pengumuman;
 use App\Services\BranchContext;
 use Illuminate\Http\JsonResponse;
@@ -63,6 +67,48 @@ class PengumumanController extends Controller
 
         $pengumuman = Pengumuman::create($validated);
 
+        // Send notifications to target recipients
+        $targetBranchId = $pengumuman->cabang_id;
+        $recipientUserIds = collect();
+
+        if (in_array($pengumuman->target, ['penghuni', 'semua'])) {
+            $tenants = Penghuni::where('status', 'aktif')
+                ->when($targetBranchId, fn ($q) => $q->whereHas('kamar.gedung', fn ($g) => $g->where('cabang_id', $targetBranchId)))
+                ->pluck('user_id');
+            $recipientUserIds = $recipientUserIds->merge($tenants);
+        }
+
+        if (in_array($pengumuman->target, ['karyawan', 'semua'])) {
+            $staff = Pegawai::when($targetBranchId, fn ($q) => $q->where('cabang_id', $targetBranchId))
+                ->pluck('user_id');
+            $recipientUserIds = $recipientUserIds->merge($staff);
+        }
+
+        foreach ($recipientUserIds->unique() as $uid) {
+            if ($uid && $uid !== auth()->id()) {
+                Notifikasi::create([
+                    'user_id' => $uid,
+                    'judul' => "Pengumuman: {$pengumuman->judul}",
+                    'isi' => substr($pengumuman->isi, 0, 150).(strlen($pengumuman->isi) > 150 ? '...' : ''),
+                    'tipe' => 'info',
+                    'redirect_url' => '/mobile-app',
+                    'referensi_tabel' => 'pengumuman',
+                    'referensi_id' => $pengumuman->id,
+                    'sudah_dibaca' => false,
+                ]);
+            }
+        }
+
+        ActivityLog::create([
+            'user_id' => auth()->id(),
+            'cabang_id' => $pengumuman->cabang_id,
+            'aksi' => 'create_pengumuman',
+            'model_type' => 'Pengumuman',
+            'model_id' => $pengumuman->id,
+            'keterangan' => "Admin menerbitkan pengumuman \"{$pengumuman->judul}\" untuk target {$pengumuman->target}.",
+            'created_at' => now(),
+        ]);
+
         return response()->json([
             'status' => 'success',
             'message' => 'Pengumuman berhasil diterbitkan.',
@@ -86,6 +132,16 @@ class PengumumanController extends Controller
 
         $pengumuman->update($validated);
 
+        ActivityLog::create([
+            'user_id' => auth()->id(),
+            'cabang_id' => $pengumuman->cabang_id,
+            'aksi' => 'update_pengumuman',
+            'model_type' => 'Pengumuman',
+            'model_id' => $pengumuman->id,
+            'keterangan' => "Admin memperbarui pengumuman #{$pengumuman->id}.",
+            'created_at' => now(),
+        ]);
+
         return response()->json([
             'status' => 'success',
             'message' => 'Pengumuman berhasil diperbarui.',
@@ -99,7 +155,19 @@ class PengumumanController extends Controller
     public function destroy(int $id): JsonResponse
     {
         $pengumuman = Pengumuman::findOrFail($id);
+        $judul = $pengumuman->judul;
+        $cabangId = $pengumuman->cabang_id;
         $pengumuman->delete();
+
+        ActivityLog::create([
+            'user_id' => auth()->id(),
+            'cabang_id' => $cabangId,
+            'aksi' => 'delete_pengumuman',
+            'model_type' => 'Pengumuman',
+            'model_id' => $id,
+            'keterangan' => "Admin menghapus pengumuman \"{$judul}\".",
+            'created_at' => now(),
+        ]);
 
         return response()->json([
             'status' => 'success',

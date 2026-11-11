@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\ActivityLog;
 use App\Models\Booking;
 use App\Models\Kamar;
 use App\Models\Komplain;
@@ -223,6 +224,23 @@ class DashboardController extends Controller
             ->take(5)
             ->get();
 
+        // Aktivitas Terbaru (Audit Log Feed)
+        $aktivitasTerbaru = ActivityLog::with('user:id,nama,role')
+            ->orderBy('id', 'desc')
+            ->take(8)
+            ->get()
+            ->map(function ($log) {
+                return [
+                    'id' => $log->id,
+                    'aksi' => $log->aksi,
+                    'keterangan' => $log->keterangan,
+                    'model_type' => $log->model_type,
+                    'user_nama' => $log->user?->nama ?? 'Sistem',
+                    'peran' => $log->peran ?? $log->user?->role ?? 'admin',
+                    'created_at' => $log->created_at ? Carbon::parse($log->created_at)->diffForHumans() : 'Baru saja',
+                ];
+            });
+
         return response()->json([
             'status' => 'success',
             'data' => [
@@ -274,6 +292,7 @@ class DashboardController extends Controller
                 'booking_terbaru' => $bookingTerbaru,
                 'pembayaran_terbaru' => $pembayaranTerbaru,
                 'komplain_terbaru' => $komplainTerbaru,
+                'aktivitas_terbaru' => $aktivitasTerbaru,
             ],
         ]);
     }

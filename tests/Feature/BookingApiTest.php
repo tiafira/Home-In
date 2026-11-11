@@ -138,7 +138,7 @@ class BookingApiTest extends TestCase
 
         $this->assertDatabaseHas('booking', [
             'id' => $booking->id,
-            'status' => 'dikonfirmasi',
+            'status' => 'menunggu_pembayaran',
             'diproses_oleh' => $this->admin->id,
         ]);
 

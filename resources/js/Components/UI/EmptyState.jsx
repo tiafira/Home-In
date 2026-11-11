@@ -1,23 +1,37 @@
 import React from 'react';
 
 export default function EmptyState({
-    title = 'Belum Ada Data',
-    message = 'Tidak ada catatan yang ditemukan untuk kriteria ini.',
+    title = 'Tidak Ada Data Ditemukan',
+    description = 'Belum ada data yang sesuai dengan pencarian atau filter yang dipilih.',
+    actionLabel,
+    onAction,
     icon,
-    action,
 }) {
     return (
-        <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-            <div className="w-16 h-16 rounded-3xl bg-blue-50 text-[#263b53] flex items-center justify-center mb-4 shadow-xs">
-                {icon || (
-                    <svg className="w-8 h-8" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m8.25 3v6.75m0 0l-3-3m3 3l3-3M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+        <div className="w-full py-16 px-4 flex flex-col items-center justify-center text-center bg-white rounded-3xl border border-slate-100 shadow-sm">
+            <div className="w-16 h-16 rounded-2xl bg-blue-50 text-[#1E5FC9] flex items-center justify-center mb-4">
+                {icon ? (
+                    icon
+                ) : (
+                    <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
                     </svg>
                 )}
             </div>
-            <h4 className="text-base font-bold text-[#263b53] mb-1">{title}</h4>
-            <p className="text-sm text-[#64748b] max-w-sm mb-5 leading-relaxed">{message}</p>
-            {action && <div>{action}</div>}
+
+            <h3 className="text-lg font-bold text-[#1F2A44] mb-1.5">{title}</h3>
+            <p className="text-xs sm:text-sm text-[#8A94A6] max-w-sm mb-6 leading-relaxed">
+                {description}
+            </p>
+
+            {actionLabel && onAction && (
+                <button
+                    onClick={onAction}
+                    className="px-5 py-2.5 rounded-xl bg-[#1E5FC9] hover:bg-[#184ea8] text-white text-xs font-bold shadow-md shadow-blue-500/20 transition active:scale-95"
+                >
+                    {actionLabel}
+                </button>
+            )}
         </div>
     );
 }

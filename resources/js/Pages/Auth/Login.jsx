@@ -1,10 +1,14 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
 export default function Login() {
     const navigate = useNavigate();
+    const location = useLocation();
+    const [searchParams] = useSearchParams();
     const { login } = useAuth();
+
+    const redirectPath = searchParams.get('redirect') || location.state?.from;
 
     const [form, setForm] = useState({
         email: '',
@@ -36,8 +40,12 @@ export default function Login() {
 
             if (['pemilik', 'admin'].includes(user.role)) {
                 navigate('/admin/dashboard');
+            } else if (user.role === 'calon_penghuni') {
+                navigate(redirectPath || '/');
+            } else if (['penghuni', 'penjaga'].includes(user.role)) {
+                navigate('/mobile-app');
             } else {
-                navigate('/unauthorized');
+                navigate('/');
             }
         } catch (err) {
             if (err.response && err.response.data) {
@@ -72,12 +80,14 @@ export default function Login() {
 
                     <div className="relative z-10">
                         <a href="/" className="inline-flex items-center space-x-3 mb-6 hover:opacity-90 transition">
-                            <div className="w-9 h-9 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center text-white shrink-0">
-                                <svg className="w-5 h-5 text-white fill-current" viewBox="0 0 20 20">
-                                    <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"></path>
-                                </svg>
+                            <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center p-1.5 shrink-0 shadow-sm">
+                                <img
+                                    src="/Group 2.svg"
+                                    alt="Home-In Logo"
+                                    className="w-full h-full object-contain"
+                                />
                             </div>
-                            <span className="font-semibold text-white text-[20px] tracking-tight">Home-In</span>
+                            <span className="font-semibold text-white text-[20px] tracking-tight">Home-in</span>
                         </a>
                         <h1 className="text-[32px] font-bold leading-tight text-white max-w-md tracking-tight">
                             Selamat datang kembali di sistem manajemen kost modern.

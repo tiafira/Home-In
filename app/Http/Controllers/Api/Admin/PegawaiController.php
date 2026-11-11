@@ -52,7 +52,7 @@ class PegawaiController extends Controller
             'name' => 'required|string|max:100',
             'email' => 'required|email|max:100|unique:users,email',
             'no_hp' => 'required|string|max:20',
-            'cabang_id' => 'required|exists:cabang,id',
+            'cabang_id' => 'nullable|exists:cabang,id',
             'jabatan' => 'required|in:admin,penjaga',
             'no_ktp' => 'nullable|string|max:20',
             'alamat' => 'nullable|string',
@@ -71,7 +71,7 @@ class PegawaiController extends Controller
 
             $pegawai = Pegawai::create([
                 'user_id' => $user->id,
-                'cabang_id' => $request->cabang_id,
+                'cabang_id' => $request->cabang_id ?: null,
                 'jabatan' => $request->jabatan,
                 'no_ktp' => $request->no_ktp,
                 'alamat' => $request->alamat,
@@ -97,7 +97,7 @@ class PegawaiController extends Controller
             'name' => 'required|string|max:100',
             'email' => 'required|email|max:100|unique:users,email,'.$pegawai->user_id,
             'no_hp' => 'required|string|max:20',
-            'cabang_id' => 'required|exists:cabang,id',
+            'cabang_id' => 'nullable|exists:cabang,id',
             'jabatan' => 'required|in:admin,penjaga',
             'no_ktp' => 'nullable|string|max:20',
             'alamat' => 'nullable|string',
@@ -113,7 +113,7 @@ class PegawaiController extends Controller
             ]);
 
             $pegawai->update([
-                'cabang_id' => $request->cabang_id,
+                'cabang_id' => $request->cabang_id ?: null,
                 'jabatan' => $request->jabatan,
                 'no_ktp' => $request->no_ktp,
                 'alamat' => $request->alamat,

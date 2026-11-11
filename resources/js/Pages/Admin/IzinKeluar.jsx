@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import AdminLayout from '../../Layouts/AdminLayout';
 import DataTable from '../../Components/UI/DataTable';
 import StatusBadge from '../../Components/UI/StatusBadge';
+import { exportToPdf } from '../../utils/exportPdf';
+import { exportToExcel } from '../../utils/exportExcel';
 import { useToast } from '../../context/ToastContext';
 import { useBranch } from '../../context/BranchContext';
 import api from '../../services/api';
@@ -46,6 +48,46 @@ export default function IzinKeluar() {
         } catch (err) {
             toast.error('Gagal memproses persetujuan izin keluar.');
         }
+    };
+
+    const handleExportPdf = () => {
+        exportToPdf({
+            title: 'Laporan Rekapitulasi Izin Keluar Penghuni',
+            subtitle: `Total: ${izins.length} Catatan Izin Keluar (Filter: ${statusFilter.toUpperCase()})`,
+            branchName: 'Home-In Kost',
+            columns: [
+                { header: 'No', render: (_, i) => i + 1, align: 'center' },
+                { header: 'Tanggal', accessor: 'tanggal' },
+                { header: 'Nama Penghuni', render: (r) => r.penghuni?.user?.nama || r.penghuni?.user?.name || '-' },
+                { header: 'Kamar / Cabang', render: (r) => `Kamar ${r.penghuni?.kamar?.nomor_kamar || '-'} (${r.penghuni?.kamar?.gedung?.cabang?.nama_cabang || '-'})` },
+                { header: 'Rencana Jam', render: (r) => `${r.rencana_jam_keluar || '-'} s/d ${r.rencana_jam_kembali || '-'}` },
+                { header: 'Alasan Keluar', accessor: 'alasan' },
+                { header: 'Status', render: (r) => (r.status || '').toUpperCase() },
+            ],
+            data: izins,
+            filename: `Laporan_Izin_Keluar_${new Date().toISOString().split('T')[0]}.pdf`,
+        });
+    };
+
+    const handleExportExcel = () => {
+        const headers = ['No', 'Tanggal Izin', 'Nama Penghuni', 'Kamar', 'Cabang', 'Jam Keluar', 'Jam Kembali', 'Alasan', 'Status'];
+        const rows = izins.map((r, i) => [
+            i + 1,
+            r.tanggal || '-',
+            r.penghuni?.user?.nama || r.penghuni?.user?.name || '-',
+            r.penghuni?.kamar?.nomor_kamar || '-',
+            r.penghuni?.kamar?.gedung?.cabang?.nama_cabang || '-',
+            r.rencana_jam_keluar || '-',
+            r.rencana_jam_kembali || '-',
+            r.alasan || '-',
+            (r.status || '').toUpperCase(),
+        ]);
+        exportToExcel({
+            title: 'Laporan Rekapitulasi Izin Keluar Penghuni',
+            headers,
+            rows,
+            filename: `Laporan_Izin_Keluar_${new Date().toISOString().split('T')[0]}.xlsx`,
+        });
     };
 
     const columns = [
@@ -117,6 +159,26 @@ export default function IzinKeluar() {
         <AdminLayout
             title="Izin Keluar"
             subtitle="Persetujuan dan pencatatan jam malam serta izin keluar penghuni kost."
+            action={
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={handleExportPdf}
+                        disabled={izins.length === 0}
+                        className="px-3.5 py-2 text-xs font-bold rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 flex items-center gap-1.5 transition active:scale-95 cursor-pointer disabled:opacity-50"
+                    >
+                        <span>📄</span>
+                        <span>Export PDF</span>
+                    </button>
+                    <button
+                        onClick={handleExportExcel}
+                        disabled={izins.length === 0}
+                        className="px-3.5 py-2 text-xs font-bold rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 flex items-center gap-1.5 transition active:scale-95 cursor-pointer disabled:opacity-50"
+                    >
+                        <span>📊</span>
+                        <span>Export Excel</span>
+                    </button>
+                </div>
+            }
         >
             {/* Filter chips */}
             <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-6">

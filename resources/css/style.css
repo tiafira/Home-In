@@ -149,6 +149,104 @@ img {
     height: 17px;
 }
 
+/* Mobile Navbar Toggle & Drawer */
+.mobile-toggle-btn {
+    display: none;
+    background: transparent;
+    border: none;
+    padding: 8px;
+    color: #263b53;
+    cursor: pointer;
+    border-radius: 10px;
+    transition: background-color 0.2s ease;
+}
+
+.mobile-toggle-btn:hover {
+    background: #f1f5f9;
+}
+
+@media (max-width: 768px) {
+    .mobile-toggle-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .nav-links {
+        display: none !important;
+    }
+}
+
+.mobile-nav-drawer {
+    position: fixed;
+    top: 78px;
+    left: 0;
+    right: 0;
+    background: #ffffff;
+    border-bottom: 1px solid #e2e8f0;
+    box-shadow: 0 16px 36px rgba(38, 59, 83, 0.14);
+    padding: 16px 20px 24px;
+    z-index: 9998;
+    max-height: calc(100vh - 78px);
+    overflow-y: auto;
+    animation: mobileNavSlideDown 0.22s ease-out;
+}
+
+@media (max-width: 650px) {
+    .mobile-nav-drawer {
+        top: 68px;
+        max-height: calc(100vh - 68px);
+    }
+}
+
+@keyframes mobileNavSlideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.mobile-nav-link {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 700;
+    color: #263b53;
+    transition: background-color 0.15s ease, color 0.15s ease;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.mobile-nav-link:hover,
+.mobile-nav-link.active {
+    background: #eff6ff;
+    color: #1E5FC9;
+}
+
+.mobile-sub-link {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #475569;
+    text-decoration: none;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.mobile-sub-link:hover {
+    background: #f1f5f9;
+    color: #1E5FC9;
+}
+
 
 /* =========================================================
    SECTION UMUM
@@ -585,13 +683,15 @@ section {
 .kost-card {
     min-width: 0;
     background: white;
-    height: 340px;
-    border-radius: 15px;
+    min-height: 420px;
+    height: auto;
+    border-radius: 18px;
     overflow: hidden;
     box-shadow: 0 7px 20px rgba(38, 59, 83, 0.07);
     transition: 0.3s ease;
     display: flex;
     flex-direction: column;
+    justify-content: space-between;
 }
 
 .kost-card:hover {
@@ -606,7 +706,7 @@ section {
 
 .kost-img {
     width: 100%;
-    height: 150px;
+    height: 180px;
     object-fit: cover;
     flex-shrink: 0;
 }
@@ -617,7 +717,7 @@ section {
 ========================= */
 
 .kost-body {
-    padding: 15px 18px 12px;
+    padding: 16px 18px 14px;
     display: flex;
     flex-direction: column;
     flex: 1;
@@ -625,19 +725,17 @@ section {
 }
 
 .kost-title {
-    font-size: 15px;
-    font-weight: 700;
-    line-height: 1.4;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    margin-bottom: 7px;
+    font-size: 16px;
+    font-weight: 800;
+    color: #1e293b;
+    line-height: 1.35;
+    margin-bottom: 6px;
 }
 
 .kost-location {
     color: #64748b;
     font-size: 12px;
-    line-height: 1.4;
+    line-height: 1.45;
     margin-bottom: 12px;
 }
 
@@ -645,7 +743,7 @@ section {
     display: flex;
     flex-wrap: wrap;
     gap: 7px;
-    margin-top: 10px;
+    margin-top: auto;
 }
 
 .kost-tags span {

@@ -20,11 +20,18 @@ const STATUS_CONFIG = {
     selesai: { label: 'Selesai', bg: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
 
     // Booking
-    menunggu_pembayaran: { label: 'Menunggu Pembayaran', bg: 'bg-amber-50 text-amber-700 border-amber-200' },
-    menunggu_persetujuan: { label: 'Menunggu Persetujuan', bg: 'bg-blue-50 text-blue-700 border-blue-200' },
+    menunggu_konfirmasi: { label: 'Menunggu Konfirmasi', bg: 'bg-amber-50 text-amber-700 border-amber-200' },
+    menunggu_persetujuan: { label: 'Menunggu Konfirmasi', bg: 'bg-amber-50 text-amber-700 border-amber-200' },
+    menunggu_respon_customer: { label: 'Menunggu Respon Customer', bg: 'bg-purple-50 text-purple-700 border-purple-200' },
     ditawarkan_alternatif: { label: 'Ditawarkan Alternatif', bg: 'bg-purple-50 text-purple-700 border-purple-200' },
+    menunggu_pembayaran: { label: 'Menunggu Pembayaran', bg: 'bg-blue-50 text-blue-700 border-blue-200' },
+    menunggu_verifikasi: { label: 'Menunggu Verifikasi Bukti', bg: 'bg-orange-50 text-orange-700 border-orange-200' },
+    terjadwal: { label: 'Terjadwal', bg: 'bg-sky-50 text-sky-700 border-sky-200' },
     dikonfirmasi: { label: 'Dikonfirmasi', bg: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
     ditolak: { label: 'Ditolak', bg: 'bg-rose-50 text-rose-700 border-rose-200' },
+    kedaluwarsa: { label: 'Kedaluwarsa', bg: 'bg-zinc-100 text-zinc-600 border-zinc-200' },
+    menunggu_refund: { label: 'Menunggu Refund', bg: 'bg-amber-50 text-amber-700 border-amber-200' },
+    sudah_direfund: { label: 'Sudah Direfund', bg: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
 
     // Izin Keluar
     menunggu: { label: 'Menunggu', bg: 'bg-amber-50 text-amber-700 border-amber-200' },
